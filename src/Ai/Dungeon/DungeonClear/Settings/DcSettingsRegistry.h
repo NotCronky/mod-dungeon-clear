@@ -793,6 +793,16 @@ inline constexpr DcSettingDef kDcSettings[] =
     { "SpectateEnable",        DcType::Bool,   1,   0,   1,  false },
     { "SpectateSpeed",         DcType::Float, 2.5, 0.5,  8,  true  },
 
+    // Addon transport compatibility. HermesProxy (modern 3.4.3 client ->
+    // 3.3.5 core) rewrites the tabs between addon message fields into spaces,
+    // so the addon can never split STATUS / BOSS lines apart. With 1 the
+    // server separates fields with '\x1F' instead, which the proxy leaves
+    // intact (DcStatusPublisher::EncodeAddonPayload), for every player. The
+    // dual-client addon asks for '\x1F' per player (`CMD\tsep\tus`), so this
+    // is only a force switch. Server-only: it is a property of how players
+    // connect, not a per-run preference.
+    { "AddonHermesCompat",     DcType::Bool,   0,   0,   1,  false },
+
     // Test-run harness (`.dc test`). Server-only: these govern the regression
     // harness, never a live dungeon run, so the addon neither shows nor
     // overrides them. They live here (rather than being read straight from

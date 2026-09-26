@@ -1399,6 +1399,25 @@ DungeonClear.AdvanceWindowYards = 0.0
 DungeonClear.SpectateEnable = 1
 
 #
+#    DungeonClear.AddonHermesCompat
+#        Forces 0x1F-separated addon replies for every player. Normally not
+#        needed: HermesProxy (e.g. a 3.4.3 Wrath Classic client on this 3.3.5a
+#        core) converts the server's addon messages for the modern client by
+#        splitting them on tabs and re-joining the fields with spaces, so the
+#        DungeonClear addon could not read its STATUS / boss-list replies. The
+#        dual-client DungeonClear addon (3.3.5a + 3.4.3) now asks for 0x1F
+#        separators itself on login, per player, so 3.3.5a and HermesProxy
+#        players can share one server with this left at 0. Set 1 only for an
+#        older 3.4.3 addon port that accepts 0x1F but does not ask for it; the
+#        original 3.3.5a-only addon understands tabs only.
+#            0 = per player: 0x1F only for addons that ask (tabs otherwise)
+#            1 = 0x1F-separated fields for everyone
+#        Default: 0
+#
+
+DungeonClear.AddonHermesCompat = 0
+
+#
 #    DungeonClear.SpectateSpeed
 #        Movement speed multiplier for the spectator free-camera (`.dc spectate`
 #        or the addon's Spectate button) — how fast the detached camera flies,
