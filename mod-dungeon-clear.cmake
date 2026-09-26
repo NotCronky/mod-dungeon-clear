@@ -39,9 +39,36 @@ if (MSVC)
     endforeach()
 endif()
 
+# Core-shape probes. See src/Ai/Dungeon/DungeonClear/Util/DcCoreCompat.h for
+# what each one gates and why it cannot be a plain #if on a core macro. Each
+# greps the exact token in the core header rather than a proxy (a file's
+# existence), so a fork that half-syncs upstream still reads correctly.
+set(DC_CORE_COMPAT_DEFS "")
+file(READ "${CMAKE_SOURCE_DIR}/src/server/game/Scripting/ScriptDefines/ServerScript.h" _dc_server_script_h)
+string(FIND "${_dc_server_script_h}" "SERVERHOOK_ON_PACKET_SENT" _dc_pos)
+if (NOT _dc_pos EQUAL -1)
+    list(APPEND DC_CORE_COMPAT_DEFS DC_CORE_HAS_ON_PACKET_SENT=1)
+endif()
+file(READ "${CMAKE_SOURCE_DIR}/src/server/game/World/IWorld.h" _dc_iworld_h)
+string(FIND "${_dc_iworld_h}" "AddQueryHolderCallback" _dc_pos)
+if (NOT _dc_pos EQUAL -1)
+    list(APPEND DC_CORE_COMPAT_DEFS DC_CORE_IWORLD_HAS_QUERYHOLDER=1)
+endif()
+if (DC_CORE_COMPAT_DEFS)
+    foreach (DC_COMPAT_TARGET modules mod_mod-dungeon-clear)
+        if (TARGET ${DC_COMPAT_TARGET})
+            target_compile_definitions(${DC_COMPAT_TARGET} PRIVATE ${DC_CORE_COMPAT_DEFS})
+        endif()
+    endforeach()
+endif()
+# The test target is defined in a deferred call that runs in the ROOT
+# directory's scope, where a variable set here is not visible.
+set_property(GLOBAL PROPERTY DC_CORE_COMPAT_DEFS "${DC_CORE_COMPAT_DEFS}")
+
 if (BUILD_TESTING)
     function(define_dungeon_clear_tests)
         set(MOD_PATH "${CMAKE_SOURCE_DIR}/modules/mod-dungeon-clear")
+        get_property(DC_CORE_COMPAT_DEFS GLOBAL PROPERTY DC_CORE_COMPAT_DEFS)
 
         # Define our standalone test target
         add_executable(dungeon_clear_tests
@@ -140,6 +167,7 @@ if (BUILD_TESTING)
         target_compile_definitions(dungeon_clear_tests PRIVATE
             DC_FIXTURE_DIR="${MOD_PATH}/t/fixtures"
             DC_MAPDATA_DIR="${MOD_PATH}/t/fixtures/mapdata"
+            ${DC_CORE_COMPAT_DEFS}
         )
 
         # Same MSVC math-macro ordering trap as the module sources above — the

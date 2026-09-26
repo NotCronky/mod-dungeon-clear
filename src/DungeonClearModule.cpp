@@ -464,16 +464,21 @@ public:
 // (`.playerbots bot self` off) has its PlayerbotAI deleted outright, so the
 // teardown never runs and the now-human player stays glued to the tank. The
 // reaper detects that orphaned generator and clears it, returning movement
-// control to the player. OnPlayerbotUpdate is the lone playerbots-specific
-// per-tick hook that fires regardless of whether the affected player still has
-// an AI (it is a global tick, not a per-bot one), which is exactly what we need
-// since the player we must fix no longer has a bot AI.
-class DungeonClearReaperScript : public PlayerbotScript
+// control to the player. The world tick fires regardless of whether the
+// affected player still has an AI (it is a global tick, not a per-bot one),
+// which is exactly what we need since the player we must fix no longer has a
+// bot AI. (This was PlayerbotScript::OnPlayerbotUpdate until mod-playerbots
+// #2765 retired that hook; it ran just before session/map updates, this runs
+// just after them, which is the same place in the cyclic order.)
+class DungeonClearReaperScript : public WorldScript
 {
 public:
-    DungeonClearReaperScript() : PlayerbotScript("DungeonClearReaperScript") {}
+    DungeonClearReaperScript()
+        : WorldScript("DungeonClearReaperScript", {
+            WORLDHOOK_ON_UPDATE,
+        }) {}
 
-    void OnPlayerbotUpdate(uint32 diff) override
+    void OnUpdate(uint32 diff) override
     {
         // Re-arm the realm-wide one-PlayerbotFactory-roll-per-tick ration
         // shared by every provisioning subsystem (the `.dc test` harness and
