@@ -12,6 +12,7 @@
 #include "Define.h"
 #include "ObjectGuid.h"
 
+class Player;
 class PlayerbotAI;
 
 class DcStatusPublisher
@@ -19,6 +20,20 @@ class DcStatusPublisher
 public:
     // Send a structured addon message with prefix "DC" to all real players in the bot's group.
     static void SendAddonMessage(PlayerbotAI* botAI, std::string const& msg);
+
+    // Field separator for a full "DC\t<fields...>" addon payload sent to
+    // `player`. Every tab after the "DC\t" prefix becomes '\x1F' (ASCII unit
+    // separator) when the player's addon asked for it (`CMD\tsep\tus`, see
+    // SetUnitSeparator) or DungeonClear.AddonHermesCompat forces it for
+    // everyone: HermesProxy turns a 3.3.5 addon chat line into a modern addon
+    // message by splitting on tabs and re-joining the fields with spaces, which
+    // the addon cannot split back apart. '\x1F' survives the proxy. Players
+    // whose addon never asked (the original 3.3.5a addon) keep plain tabs.
+    static std::string EncodeAddonPayload(Player* player, std::string payload);
+
+    // Per-player opt-in to '\x1F' field separators, sent by an addon that
+    // understands them. Cleared on logout.
+    static void SetUnitSeparator(ObjectGuid player, bool enabled);
 
     // --- Event-driven status pushes -----------------------------------------
     // The companion addon used to poll `CMD\tstatus` every 2s. Instead the

@@ -189,16 +189,55 @@ void DcStatusPublisher::SendAddonMessage(PlayerbotAI* botAI, std::string const& 
     if (!bot || !bot->GetGroup())
         return;
 
+    // Encoded per receiver: a 3.3.5a player and a HermesProxy player in the
+    // same group need different field separators.
     std::string const payload = "DC\t" + msg;
-
-    WorldPacket data;
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_PARTY, LANG_ADDON, bot->GetGUID(),
-                                 ObjectGuid::Empty, payload, CHAT_TAG_NONE,
-                                 bot->GetName());
-
     for (Player* receiver : botAI->GetRealPlayersInGroup())
+    {
+        WorldPacket data;
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_PARTY, LANG_ADDON, bot->GetGUID(),
+                                     ObjectGuid::Empty, EncodeAddonPayload(receiver, payload),
+                                     CHAT_TAG_NONE, bot->GetName());
         ServerFacade::instance().SendPacket(receiver, &data);
+    }
 }
+
+namespace
+{
+    // Players whose addon asked for '\x1F' field separators. Written from the
+    // chat hook (session update) and read from map updates, hence the lock.
+    std::mutex gUnitSepMutex;
+    std::unordered_set<ObjectGuid> gUnitSepPlayers;
+}
+
+void DcStatusPublisher::SetUnitSeparator(ObjectGuid player, bool enabled)
+{
+    std::lock_guard<std::mutex> lock(gUnitSepMutex);
+    if (enabled)
+        gUnitSepPlayers.insert(player);
+    else
+        gUnitSepPlayers.erase(player);
+}
+
+std::string DcStatusPublisher::EncodeAddonPayload(Player* player, std::string payload)
+{
+    bool useUnitSep = DcSettings::GetBool(player, "AddonHermesCompat");
+    if (!useUnitSep && player)
+    {
+        std::lock_guard<std::mutex> lock(gUnitSepMutex);
+        useUnitSep = gUnitSepPlayers.count(player->GetGUID()) != 0;
+    }
+    if (!useUnitSep)
+        return payload;
+
+    // Keep the "DC\t" prefix tab: HermesProxy splits on it to find the addon
+    // prefix. Only the field separators after it change.
+    constexpr std::size_t prefixLen = 3;
+    if (payload.size() > prefixLen)
+        std::replace(payload.begin() + prefixLen, payload.end(), '\t', '\x1F');
+    return payload;
+}
+
 std::string DcStatusPublisher::BuildStatusPayload(PlayerbotAI* botAI)
 {
     AiObjectContext* context = botAI->GetAiObjectContext();

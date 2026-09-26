@@ -31,6 +31,7 @@
 #include "DungeonClearDispatch.h"
 #include "StringFormat.h"
 #include "Util/DcSpectator.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcStatusPublisher.h"
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettings.h"
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettingsRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Util/DungeonClearUtil.h"
@@ -45,7 +46,8 @@ namespace
 
         WorldPacket data;
         ChatHandler::BuildChatPacket(data, CHAT_MSG_PARTY, LANG_ADDON, player->GetGUID(),
-                                     ObjectGuid::Empty, payload, CHAT_TAG_NONE,
+                                     ObjectGuid::Empty,
+                                     DcStatusPublisher::EncodeAddonPayload(player, payload), CHAT_TAG_NONE,
                                      player->GetName());
 
         ServerFacade::instance().SendPacket(player, &data);
@@ -200,6 +202,8 @@ public:
     // player who never owned a run.
     void OnPlayerLogout(Player* player) override
     {
+        if (player)
+            DcStatusPublisher::SetUnitSeparator(player->GetGUID(), false);
         if (!DcModule::IsEnabled())
             return;  // no run can exist, so no override store to clear
         if (player)
@@ -228,6 +232,16 @@ public:
         // in OnPlayerCanUseChat above; here we only act on the command.
         if (!IsDcAddonCommand(type, lang, msg))
             return;
+
+        // Separator handshake: an addon that understands '\x1F' field
+        // separators asks for them before anything else, so replies survive
+        // HermesProxy (3.4.3 clients). Handled even while the module is
+        // disabled, so the "disabled" error below arrives readable too.
+        if (msg.compare(7, std::string::npos, "sep\tus") == 0)
+        {
+            DcStatusPublisher::SetUnitSeparator(player->GetGUID(), true);
+            return;
+        }
 
         // Master switch: answer the panel instead of silently dropping every
         // button it presses. The relay suppression in OnPlayerCanUseChat still
