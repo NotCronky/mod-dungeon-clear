@@ -4,6 +4,7 @@
  */
 
 #include "TestRun/DcTestRunJob.h"
+#include "TestRun/DcRotationCensus.h"
 
 #include <algorithm>
 #include <array>
@@ -1495,6 +1496,10 @@ void DcTestRunJob::TickStarting()
         // Armed here rather than at Teleporting so it covers exactly the window
         // the party is actually walking the dungeon.
         _areaTriggers.Arm(_mapId);
+        // The rotation census covers the clear itself, not the setup's gearing and buffing.
+        for (Slot const& slot : _slots)
+            DcRotationCensus::Start(slot.guid);
+
         EnterStage(Stage::Monitoring);
         return;
     }
@@ -2387,6 +2392,19 @@ void DcTestRunJob::Teardown()
         // member, and LogoutBots removes them from the world. Afterwards there
         // is nothing left to describe why the run failed.
         _record.diag = DcDiag::Capture(tank, "teardown");
+
+        // Rotation census, while the members are still in world (their spellbooks
+        // name the abilities they never cast).
+        for (DcTestRunRecord::CompEntry& entry : _record.comp)
+        {
+            Player* member = ObjectAccessor::FindPlayer(ObjectGuid(entry.guid));
+            std::vector<DcRotationCensus::SpellLine> lines;
+            DcRotationCensus::Collect(member, lines, entry.unusedSpells);
+            entry.rotation.clear();
+            for (DcRotationCensus::SpellLine const& line : lines)
+                entry.rotation.push_back({ line.spellId, line.name, line.casts, line.rejected, line.topReject,
+                                           line.topRejectCount });
+        }
         _record.stallAtEnd = _record.diag.stallReason;
         _record.phaseAtEnd = _record.diag.phase;
         if (_record.diag.valid && _record.result != "success")
@@ -2441,6 +2459,9 @@ void DcTestRunJob::Teardown()
     // reaches this at all, which is exactly why the pre-teleport sweep cannot
     // rely on it.
     UnbindFromMap();
+
+    for (Slot const& slot : _slots)
+        DcRotationCensus::Stop(slot.guid);
 
     _record.endedAtMs = NowUnixMs();
     _record.durationS = static_cast<uint32>((_record.endedAtMs - _record.startedAtMs) / 1000);
