@@ -138,7 +138,26 @@ namespace DcTestRunRecord
             s << ",\"roleMismatch\":" << (c.roleMismatch ? "true" : "false")
               << ",\"from\":{\"map\":" << c.fromMap
               << ",\"x\":" << c.fromX << ",\"y\":" << c.fromY << ",\"z\":" << c.fromZ
-              << ",\"o\":" << c.fromO << "}}";
+              << ",\"o\":" << c.fromO << "}";
+            s << ",\"rotation\":[";
+            for (std::size_t j = 0; j < c.rotation.size(); ++j)
+            {
+                CompEntry::RotationSpell const& r = c.rotation[j];
+                if (j)
+                    s << ',';
+                s << "{\"spellId\":" << r.spellId << ",\"name\":";
+                AppendEscaped(s, r.name);
+                s << ",\"casts\":" << r.casts << ",\"rejected\":" << r.rejected
+                  << ",\"topReject\":" << r.topReject << ",\"topRejectCount\":" << r.topRejectCount << "}";
+            }
+            s << "],\"unusedSpells\":[";
+            for (std::size_t j = 0; j < c.unusedSpells.size(); ++j)
+            {
+                if (j)
+                    s << ',';
+                AppendEscaped(s, c.unusedSpells[j]);
+            }
+            s << "]}";
         }
         s << "],\"startedAtMs\":" << rec.startedAtMs
           << ",\"endedAtMs\":" << rec.endedAtMs

@@ -4,7 +4,7 @@ dc_test_run.py — everything known about one test run, by its id.
 
 `.dc test` scatters a single run's evidence across five places:
 
-  dc_testruns.jsonl        the finished-run record (schema v7-v13): comp, result,
+  dc_testruns.jsonl        the finished-run record (schema v7-v14): comp, result,
                            fail reason, boss timeline, deaths, pulls, status
                            timeline, pauses, watchdog config, and the teardown
                            DcDiag snapshot
