@@ -16,6 +16,7 @@
 #include "InstanceScript.h"
 #include "Log.h"
 #include "Map.h"
+#include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonWingRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcAnchorDone.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcBossOrdering.h"
@@ -271,6 +272,23 @@ std::optional<DungeonBossInfo> NextDungeonBossValue::Calculate()
 
     std::optional<DungeonBossInfo> pick =
         DcBossOrdering::PickTarget(cands, stickyEntry, stickyEncounterIndex, haveStickyIndex);
+
+    // PATROL THREATS. A boss on a waypoint patrol through the picked boss's room
+    // walks into that fight (Molten Core's Baron Geddon patrols through
+    // Shazzrah's — tr-20261007-051506-2 wiped to him there), so while it is
+    // still a candidate it goes first. The redirect becomes the commit like any
+    // pick; once it is dead the ordering carries on to the boss it was blocking.
+    if (pick)
+        for (uint32 const threat : BossSpawnIndex::PatrolThreats(map->GetId(), pick->entry, bosses))
+        {
+            auto const it = std::find_if(cands.begin(), cands.end(),
+                                         [threat](DungeonBossInfo const& c) { return c.entry == threat; });
+            if (it != cands.end())
+            {
+                pick = *it;
+                break;
+            }
+        }
 
     // A stall reason set by Advance always describes the boss it was heading to
     // ("Can't reach <boss>: not spawned", "Stuck near <boss>", …). The instant
