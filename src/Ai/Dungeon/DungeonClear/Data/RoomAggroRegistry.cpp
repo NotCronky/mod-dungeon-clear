@@ -300,10 +300,15 @@ namespace
         // bots' Garr tactics (banishes, Firesworn first).
         //
         // radius 85 covers the giants; the whitelist keeps the Firesworn and hounds
-        // out of the room set. pullOutRadius 12 forces the advanced pull for them,
-        // and skirtRadius 35 keeps its camp and approach clear of Garr's aggro.
+        // out of the room set. pullOutRadius 12 forces the advanced pull for them.
+        // skirtRadius 60 keeps the camp and the tank's approach clear of the
+        // hounds as well as Garr: their loops reach 46yd off him (path 566730 to
+        // 728,-487 / 668,-538), and at 35 an off-tank on the approach to the south
+        // Annihilator came within 20yd of the east hound, which brought Garr's
+        // pack into the drag (tr-20261007-213207-1). The giants' tag spots sit
+        // 60-90yd out, so 60 still reaches them.
         { 409, 12057, 85.0f, { 11659, 11665 }, false, 0.0f, 0.0f,
-          /*pullOutRadius*/ 12.0f, /*skirtRadius*/ 35.0f },
+          /*pullOutRadius*/ 12.0f, /*skirtRadius*/ 60.0f },
     };
 }
 

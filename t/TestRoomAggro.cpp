@@ -494,7 +494,9 @@ TEST(RoomAggroRegistryTest, MoltenCoreGarrClearsTheLavaGiantsAroundHisCave)
     RoomAggroBoss const* g = RoomAggroRegistry::Find(409, 12057);
     ASSERT_NE(g, nullptr);
     EXPECT_GE(g->radius, 79.0f);  // the farthest Molten Destroyer
-    EXPECT_FLOAT_EQ(RoomAggroRegistry::SkirtOverride(409, 12057), 35.0f);
+    // The skirt clears the hound loops (46yd off Garr at their far end), and
+    // stays inside the giants' tag spots (60yd+).
+    EXPECT_FLOAT_EQ(RoomAggroRegistry::SkirtOverride(409, 12057), 60.0f);
 
     // The Molten Destroyers and Lava Annihilators east and south are room trash.
     EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*g, 11659, 56.0f, g->pullOutRadius));
