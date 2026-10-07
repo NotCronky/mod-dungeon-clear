@@ -36,6 +36,7 @@ namespace
         o.atCommitRange = false;
         o.patrolContended = false;
         o.patrolWaitExpired = false;
+        o.forced = false;
         return o;
     }
 }
@@ -143,6 +144,32 @@ TEST(DcPullDecision, PatrolContendedApproachingWalksInAsLeeroy)
     o.atCommitRange = false;     // still approaching
     o.patrolContended = true;
     EXPECT_EQ(DecidePull(o), PullVerdict::ApproachAsLeeroy);
+}
+
+TEST(DcPullDecision, ForcedDragNeverWalksInAsLeeroy)
+{
+    // A pull forced Advanced (a room's pullOutRadius) that a patrol makes look
+    // contended must not take the provisional-Leeroy walk-in: its tag lands
+    // before commit range and the pack is fought where it stands.
+    PullObservation o = Base();
+    o.advanced = true;
+    o.forced = true;
+    o.patrolWaitEnabled = true;
+    o.atCommitRange = false;
+    o.patrolContended = true;
+    EXPECT_EQ(DecidePull(o), PullVerdict::Advanced);
+}
+
+TEST(DcPullDecision, ForcedDragStillWaitsOutAPatrolAtCommit)
+{
+    PullObservation o = Base();
+    o.advanced = true;
+    o.forced = true;
+    o.patrolWaitEnabled = true;
+    o.atCommitRange = true;
+    o.patrolContended = true;
+    o.patrolWaitExpired = false;
+    EXPECT_EQ(DecidePull(o), PullVerdict::PatrolWaitHold);
 }
 
 TEST(DcPullDecision, PatrolContendedAtCommitHolds)

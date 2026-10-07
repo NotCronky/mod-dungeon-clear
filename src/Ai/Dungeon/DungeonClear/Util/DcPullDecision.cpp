@@ -56,10 +56,15 @@ namespace DcPullDecision
                 if (o.patrolContended && !o.patrolWaitExpired)
                     return PullVerdict::PatrolWaitHold;
             }
-            else if (o.patrolContended)
+            else if (o.patrolContended && !o.forced)
             {
                 // Still approaching a patrol-contended pack: stay provisional Leeroy
                 // and walk in; don't run the wait clock until the decision point.
+                // Never for a FORCED drag: the walk-in's tag lands before commit
+                // range, and the pack is fought where it stands — the one thing
+                // the force exists to stop. Garr's south Lava Annihilator, forced
+                // by the room's pullOutRadius, was contended by a patrolling Core
+                // Hound, walked in as Leeroy and pulled Garr (tr-20261007-201839-1).
                 return PullVerdict::ApproachAsLeeroy;
             }
         }
