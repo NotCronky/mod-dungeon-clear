@@ -820,7 +820,7 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         DcEngageGeometry::EnRouteSweepApplies(bot) &&
         DcEngageGeometry::TargetInsideBystanderPack(bot, target);
 
-    bool const forceAdv = DcTargeting::RoomClearForcesAdvanced(bot, context) ||
+    bool const forceAdv = DcTargeting::RoomClearForcesAdvanced(bot, context, target) ||
                           insideNeighbour ||
                           DcSettings::GetBool(bot, "PullForceAdvanced");
 
