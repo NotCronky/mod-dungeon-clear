@@ -269,6 +269,13 @@ public:
     // it has been since S1593.
     static bool IsPullbackBossDue(Player* bot, AiObjectContext* ctx);
 
+    // A PATROLLING pull-back boss (Baron Geddon) is tagged only when his loop has
+    // brought him within PatrolBossTagRange of the camp AND no idle mob or boss
+    // stands within PatrolBossTagClearance of him (threat map), so tagging and
+    // dragging him starts no other fight. True for anything that does not patrol,
+    // and once he is in combat. Logs why it is holding, throttled.
+    static bool PatrolBossTagWindowOpen(Player* bot, AiObjectContext* ctx, Creature* boss);
+
     // --- Room-wide-aggro pre-clear (RoomAggroRegistry) --------------------
 
     // True when the next boss is a flagged room-aggro boss AND the tank is at

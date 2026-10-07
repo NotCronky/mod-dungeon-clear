@@ -12,6 +12,7 @@
 #include "CreatureGroups.h"
 #include "GameTime.h"
 #include "Map.h"
+#include "Player.h"
 #include "MotionMaster.h"
 #include "ObjectMgr.h"
 #include "Timer.h"
@@ -242,4 +243,32 @@ std::optional<DcPatrolArrival> DcThreatMap::NextPatrollingBoss(float x, float y,
             soonest = DcPatrolArrival{&e, eta};
     }
     return soonest;
+}
+
+DcThreatEntry const* DcThreatMap::NearestIdleHostile(Map* map, Player* bot, float x, float y, float z, float radius,
+                                                     float heightBand, ObjectGuid const& exclude) const
+{
+    DcThreatEntry const* nearest = nullptr;
+    float best = radius * radius;
+    for (DcThreatEntry const& e : _entries)
+    {
+        if (!e.alive || e.inCombat || e.evading || (!exclude.IsEmpty() && e.guid == exclude))
+            continue;
+        if (std::fabs(e.z - z) > heightBand)
+            continue;
+        float const dx = e.x - x;
+        float const dy = e.y - y;
+        float const d2 = dx * dx + dy * dy;
+        if (d2 > best)
+            continue;
+        if (e.loaded)
+        {
+            Creature const* c = map ? map->GetCreature(e.guid) : nullptr;
+            if (!c || !c->IsAlive() || !bot || !c->IsHostileTo(bot))
+                continue;
+        }
+        best = d2;
+        nearest = &e;
+    }
+    return nearest;
 }

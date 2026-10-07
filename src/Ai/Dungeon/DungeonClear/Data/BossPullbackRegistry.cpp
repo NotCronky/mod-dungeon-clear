@@ -56,6 +56,17 @@ namespace
     {
         static std::vector<BossPullback> const rows = {
             // map  entry  anchor x  y  z  forceAggro  summonIfStuck
+
+            // Molten Core — Baron Geddon. Not lethal ground: a PATROL. His loop runs
+            // from this ledge down through Shazzrah's room and past the Firewalker
+            // and Flameguard packs, and engaging him wherever he walked dragged
+            // Shazzrah and three packs into one fight (tr-20261007-222010-1). The
+            // party waits on his ledge at his own spawn (the quietest stretch of
+            // the loop, and his roster anchor, so boss navigation already walks
+            // here), and the tank tags him only once the loop brings him back
+            // within reach with no idle pack near him
+            // (DcTargeting::PatrolBossTagWindowOpen), then drags him home.
+            { 409, 12056, 747.5f, -981.7f, -178.4f },
         };
         return rows;
     }

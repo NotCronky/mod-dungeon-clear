@@ -11,8 +11,9 @@
 // Static registry of PULL-BACK bosses: bosses that must never be fought where
 // they stand, because the ground they stand on kills the party.
 //
-// THE TABLE IS CURRENTLY EMPTY — read BossPullbackRegistry.cpp before adding to
-// it. Its one and only row (Ghaz'an, 18105, The Underbog 546) was retired in
+// ONE ROW today, and not for the reason the facility was built: Baron Geddon in
+// Molten Core, a PATROLLING boss whose loop crosses other packs (see the row).
+// Read BossPullbackRegistry.cpp before adding to it. Its one and only row (Ghaz'an, 18105, The Underbog 546) was retired in
 // S1593 once the actual cause was fixed upstream: he was only ever in the water
 // because a headless party never fired areatrigger 4302, the sole caller of his
 // ACTION_MOVE_TO_PLATFORM. He climbs onto meshed, connected ground now and is

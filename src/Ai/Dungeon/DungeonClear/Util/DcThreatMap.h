@@ -17,6 +17,7 @@
 #include "DcThreatMapKernel.h"
 
 class Map;
+class Player;
 
 // Every DB-spawned creature of one instance, with its live state.
 //
@@ -107,6 +108,13 @@ public:
     // out: there is no time to wait for.
     std::optional<DcPatrolArrival> NextPatrollingBoss(float x, float y, float z, float radius,
                                                        float horizonSec) const;
+
+    // The nearest idle mob hostile to `bot` within `radius` (2D) and `heightBand`
+    // of the point, other than `exclude`: alive, not in combat, not evading. A
+    // creature in an unloaded grid counts, at its last known position (nobody
+    // has killed it). Other bosses count too. Null when the ground is quiet.
+    DcThreatEntry const* NearestIdleHostile(Map* map, Player* bot, float x, float y, float z, float radius,
+                                            float heightBand, ObjectGuid const& exclude) const;
 
     uint32 LastRefreshMs() const { return _lastRefreshMs; }
 
