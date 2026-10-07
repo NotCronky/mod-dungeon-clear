@@ -366,6 +366,9 @@ inline constexpr DcSettingDef kDcSettings[] =
     // time counts (DungeonClearMath::RoomClearGiveUpDue). 0 = never give up.
     // Max 600s. (Old 30s default tripped before the tank even reached the room.)
     { "ClearRoomBeforeBoss",   DcType::Bool,   1,   0,    1,  true  },
+    // Read the instance-wide threat map (Util/DcThreatMap.h) instead of the
+    // tank-centred far-target scan where a consumer has been moved onto it.
+    { "ThreatMap",             DcType::Bool,   1,   0,    1,  false },
     { "RoomClearTimeout",      DcType::UInt, 180,   0,  600,  true  },
     // Extra yards added to a room-aggro boss's avoid-sphere when the tank routes
     // AROUND it to reach a trash pack (DcEngageGeometry::AggroSafeApproachPoint).

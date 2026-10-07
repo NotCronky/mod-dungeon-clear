@@ -47,6 +47,7 @@
 #include "Util/DcWatchHop.h"
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettings.h"
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettingsRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcThreatMap.h"
 #include "Ai/Dungeon/DungeonClear/Util/DungeonClearUtil.h"
 
 using namespace Acore::ChatCommands;
@@ -353,6 +354,7 @@ public:
             { "wing",   HandleWing,   SEC_PLAYER, Console::No },
             { "config", HandleConfig, SEC_PLAYER, Console::No },
             { "spectate", HandleSpectate, SEC_PLAYER, Console::No },
+            { "threatmap", HandleThreatMap, SEC_GAMEMASTER, Console::No },
             { "test",   dcTestTable },
             { "dungeonqueuefill", dcQueueFillTable },
             { "bgqueuefill", dcBgQueueFillTable },
@@ -373,6 +375,61 @@ public:
     static bool HandleBosses(ChatHandler* handler, Optional<std::string> param) { return RunDcCommand(handler, "dc bosses", param ? *param : ""); }
     static bool HandleGo(ChatHandler* handler, Tail targetBoss) { return RunDcCommand(handler, "dc go", std::string(targetBoss)); }
     static bool HandleWing(ChatHandler* handler, Optional<std::string> wing) { return RunDcCommand(handler, "dc wing", wing ? *wing : ""); }
+
+    // `.dc threatmap [radius]` — what the instance's threat map holds around
+    // you: every living spawn within `radius` (default 60yd), nearest first,
+    // with its pack and state. Safe from a chat command: the world thread never
+    // runs while the map threads update.
+    static bool HandleThreatMap(ChatHandler* handler, Optional<float> radius)
+    {
+        Player* player = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
+        DcThreatMap const* tm = player ? DcThreatMap::Get(player->GetMap()) : nullptr;
+        if (!tm)
+        {
+            handler->SendSysMessage("No threat map here: only dungeon and raid instances have one.");
+            return true;
+        }
+
+        float const r = std::clamp(radius.value_or(60.0f), 1.0f, 500.0f);
+        std::vector<DcThreatEntry const*> near =
+            tm->AliveWithin(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), r);
+        auto const dist = [player](DcThreatEntry const* e)
+        { return player->GetDistance(e->x, e->y, e->z); };
+        std::sort(near.begin(), near.end(),
+                  [&dist](DcThreatEntry const* a, DcThreatEntry const* b) { return dist(a) < dist(b); });
+
+        uint32 alive = 0;
+        for (DcThreatEntry const& e : tm->Entries())
+            alive += e.alive ? 1 : 0;
+        handler->PSendSysMessage("Threat map: {} spawns, {} alive; {} within {:.0f}yd:",
+                                 tm->Entries().size(), alive, near.size(), r);
+
+        constexpr std::size_t kMaxLines = 30;
+        for (std::size_t i = 0; i < near.size() && i < kMaxLines; ++i)
+        {
+            DcThreatEntry const* e = near[i];
+            CreatureTemplate const* ct = sObjectMgr->GetCreatureTemplate(e->entry);
+            std::string flags;
+            if (!e->loaded)
+                flags += " unloaded";
+            if (e->inCombat)
+                flags += " combat";
+            if (e->evading)
+                flags += " evading";
+            if (e->patrols)
+                flags += " patrol";
+            if (e->boss)
+                flags += " boss";
+            float const speed = std::sqrt(e->vx * e->vx + e->vy * e->vy);
+            if (speed > 0.1f)
+                flags += Acore::StringFormat(" moving {:.1f}yd/s", speed);
+            handler->PSendSysMessage("  {:5.1f}yd  {} ({}) spawn {} pack {}{}", dist(e),
+                                     ct ? ct->Name : "?", e->entry, e->spawnId, e->packId, flags);
+        }
+        if (near.size() > kMaxLines)
+            handler->PSendSysMessage("  ... {} more", near.size() - kMaxLines);
+        return true;
+    }
 
     // --- `.dc test` — the automated test-run harness ------------------------
     // These act on DcTestRunManager directly (never DispatchToTankBots: the

@@ -562,6 +562,20 @@ DungeonClear.AggroRangeMargin = 2.0
 DungeonClear.ClearRoomBeforeBoss = 1
 
 #
+#    DungeonClear.ThreatMap
+#        1 (default): the clear reads the instance's threat map, a table of every
+#        spawned creature in the instance with its live position and state,
+#        instead of scanning around the tank. Used so far for the room pre-clear:
+#        what is in a boss's room is measured from the boss, and a mob that is
+#        evading or out of the tank's view no longer drops out of it. 0 restores
+#        the tank-centred scan.
+#
+#        Default: 1
+#
+
+DungeonClear.ThreatMap = 1
+
+#
 #    DungeonClear.RoomClearTimeout
 #        Seconds the tank keeps holding the boss pull to clear the room (see
 #        ClearRoomBeforeBoss) without the remaining count dropping, before it

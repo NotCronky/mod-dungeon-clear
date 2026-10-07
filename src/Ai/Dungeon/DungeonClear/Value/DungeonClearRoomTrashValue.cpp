@@ -24,6 +24,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcStatusPublisher.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcTargeting.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcThreatMap.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcTickMemo.h"
 #include "Ai/Dungeon/DungeonClear/Util/DungeonClearTuning.h"
 #include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
@@ -158,7 +159,24 @@ GuidVector DungeonClearRoomTrashValue::Calculate()
     // (widen radius) vs "threat is neutral-but-near" (explicit member whitelist).
     std::map<uint32, uint32> diagHostileNear, diagNeutralNear;
 
-    GuidVector const& candidates = AI_VALUE(GuidVector, DcKey::FarTargets);
+    // Candidates: everything the threat map has alive inside the room, measured
+    // from the boss. The old source, the tank's far-target scan, is centred on
+    // the TANK and drops a mob while it evades, so the room's contents changed
+    // with where the tank stood and with the mobs' state (tr-20261007-201839-1:
+    // kept flipped 3/4 every tick while an Annihilator evaded). ThreatMap = 0
+    // restores it.
+    GuidVector candidates;
+    DcThreatMap const* threatMap =
+        DcSettings::GetBool(bot, "ThreatMap") ? DcThreatMap::Get(bot->GetMap()) : nullptr;
+    if (threatMap)
+    {
+        for (DcThreatEntry const* e : threatMap->AliveWithin(liveBoss->GetPositionX(), liveBoss->GetPositionY(),
+                                                             liveBoss->GetPositionZ(), room->radius))
+            if (e->loaded && !e->guid.IsEmpty())
+                candidates.push_back(e->guid);
+    }
+    else
+        candidates = AI_VALUE(GuidVector, DcKey::FarTargets);
     nCand = static_cast<uint32>(candidates.size());
     for (ObjectGuid const guid : candidates)
     {
