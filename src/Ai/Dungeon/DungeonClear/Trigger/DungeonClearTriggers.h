@@ -601,6 +601,18 @@ public:
 // drops mid-pack-fight) and no role exemption (neither can be tanked). Inert on
 // maps with no rows of either kind, while CC'd/rooted (can't move), and when
 // DungeonClear.HazardVacate is off. See DcHazard::NearestVacate.
+// Member proximity guard: a follower standing inside an idle pack's aggro (plus
+// DungeonClear.ProximityGuardMargin). See DcMemberGuard.h for who and what counts.
+class DungeonClearMemberGuardTrigger : public Trigger
+{
+public:
+    DungeonClearMemberGuardTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "dungeon clear member guard", 1)
+    {
+    }
+    bool IsActive() override;
+};
+
 class DungeonClearHazardVacateTrigger : public Trigger
 {
 public:

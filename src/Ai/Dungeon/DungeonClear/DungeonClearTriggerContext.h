@@ -46,6 +46,7 @@ public:
         creators["dungeon clear regroup combat"] = &DungeonClearTriggerContext::regroup_combat;
         creators["dungeon clear break stuck combat"] = &DungeonClearTriggerContext::break_stuck_combat;
         creators["dungeon clear heal reposition"] = &DungeonClearTriggerContext::heal_reposition;
+        creators["dungeon clear member guard"] = &DungeonClearTriggerContext::member_guard;
         creators["dungeon clear hazard vacate"] = &DungeonClearTriggerContext::hazard_vacate;
         creators["dungeon clear hor stay ahead"] = &DungeonClearTriggerContext::hor_stay_ahead;
         creators["dungeon clear oc rider"] = &DungeonClearTriggerContext::oc_rider;
@@ -106,6 +107,7 @@ private:
     static Trigger* regroup_combat(PlayerbotAI* ai) { return new DungeonClearRegroupCombatTrigger(ai); }
     static Trigger* break_stuck_combat(PlayerbotAI* ai) { return new DungeonClearBreakStuckCombatTrigger(ai); }
     static Trigger* heal_reposition(PlayerbotAI* ai) { return new DungeonClearHealRepositionTrigger(ai); }
+    static Trigger* member_guard(PlayerbotAI* ai) { return new DungeonClearMemberGuardTrigger(ai); }
     static Trigger* hazard_vacate(PlayerbotAI* ai) { return new DungeonClearHazardVacateTrigger(ai); }
     static Trigger* hor_stay_ahead(PlayerbotAI* ai) { return new DungeonClearHorStayAheadTrigger(ai); }
     static Trigger* oc_rider(PlayerbotAI* ai) { return new DungeonClearOculusRiderTrigger(ai); }

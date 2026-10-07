@@ -418,3 +418,18 @@ TEST(DungeonClearRelevanceTest, PullOutranksTheObjectiveDriverItCanStarve)
     // all alike — the stand-down has to be authoritative, not advisory.
     EXPECT_GT(DcRel::Pull, DcRel::EventDue);
 }
+
+// The member proximity guard steps a follower out of an idle pack's aggro. It must
+// beat every DC role reposition and stock combat mover that could walk the bot
+// back in, yield to the hazard vacate (damage now) and the camp owners (which
+// place the party on purpose), and never tie either.
+TEST(DungeonClearRelevanceTest, MemberGuardSitsBetweenHazardAndRolePositioning)
+{
+    EXPECT_LT(DcRel::MemberGuard, DcRel::HazardVacate);
+    EXPECT_LT(DcRel::MemberGuard, DcRel::StayAtCamp);
+    EXPECT_GT(DcRel::MemberGuard, DcRel::HealReposition);
+    EXPECT_GT(DcRel::MemberGuard, DcRel::AssistCampCombat);
+    EXPECT_GT(DcRel::MemberGuard, DcRel::StrandedRecovery);
+    EXPECT_GT(DcRel::MemberGuard, DcRel::NeedsRest);
+    EXPECT_GT(DcRel::MemberGuard, DcRel::Advance);
+}

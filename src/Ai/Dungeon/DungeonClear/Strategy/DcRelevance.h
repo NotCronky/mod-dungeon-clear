@@ -279,6 +279,12 @@ namespace DcRel
     inline constexpr float KzChess                = 64.25f; // any role: the Karazhan chess seat (and conductor)
     inline constexpr float HorStayAhead           = 56.0f; // any role: forward, with the party and out of his ring
     inline constexpr float HazardVacate           = 55.0f; // any role: clear an unfightable hazard's pulse
+    // Member proximity guard (DcMemberGuard): step out of an idle pack's aggro.
+    // Under the hazard vacate (a pulse is damage now; the guard prevents a pull)
+    // and the camp owners (60, which place the party deliberately), above every
+    // stock combat mover and the DC role repositions (heal 41, assist 35) so a
+    // healer chasing a heal angle cannot walk it back into the pack.
+    inline constexpr float MemberGuard            = 54.0f; // follower: out of an idle pack's aggro
     inline constexpr float AssistCampCombat       = 35.0f; // follower: onto the leader's pack
     // Leader-only, combat side of the KillCreature-engage objective. A stealthed
     // sapper (Shattered Halls' Shattered Hand Assassins) flags the party into combat

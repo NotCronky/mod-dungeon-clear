@@ -576,6 +576,25 @@ DungeonClear.ClearRoomBeforeBoss = 1
 DungeonClear.ThreatMap = 1
 
 #
+#    DungeonClear.ProximityGuard
+#    DungeonClear.ProximityGuardMargin
+#    DungeonClear.ProximityGuardHysteresis
+#        Party members who are not the tank step out of an idle pack's aggro: a
+#        bot standing within the pack's aggro reach plus ProximityGuardMargin
+#        yards walks out to reach + margin + ProximityGuardHysteresis, straight
+#        away from the pack, or toward the tank if straight away would walk into
+#        another one. In combat only healers and ranged move (melee stay on their
+#        target); between pulls everyone does. Needs DungeonClear.ThreatMap.
+#        ProximityGuard is on in raids and off in dungeons by default
+#        (DungeonClear.ProximityGuard.Raid overrides the raid value).
+#
+#        Default: 0 (raids: 1) / 2.0 / 3.0
+#
+
+DungeonClear.ProximityGuardMargin = 2.0
+DungeonClear.ProximityGuardHysteresis = 3.0
+
+#
 #    DungeonClear.RoomClearTimeout
 #        Seconds the tank keeps holding the boss pull to clear the room (see
 #        ClearRoomBeforeBoss) without the remaining count dropping, before it
@@ -1582,6 +1601,10 @@ DungeonClear.SpectateSpeed = 2.5
 #    dungeon spread would hold the advance behind every straggler. (The clamp
 #    ceiling for overrides is 120.)
 # DungeonClear.PartyMaxSpread.Raid = 40
+
+#    The member proximity guard is new and proven on Molten Core first, so it is
+#    on in raids and off in dungeons until 5-man runs back it.
+# DungeonClear.ProximityGuard.Raid = 1
 
 #    Raid-only settings (no ".Raid" suffix — these keys are consulted only on
 #    raid maps in the first place).

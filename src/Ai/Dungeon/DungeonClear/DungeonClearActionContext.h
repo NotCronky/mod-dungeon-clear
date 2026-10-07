@@ -46,6 +46,7 @@ public:
         creators["dungeon clear leader assist"] = &DungeonClearActionContext::leader_assist;
         creators["dungeon clear regroup combat"] = &DungeonClearActionContext::regroup_combat;
         creators["dungeon clear heal reposition"] = &DungeonClearActionContext::heal_reposition;
+        creators["dungeon clear member guard"] = &DungeonClearActionContext::member_guard;
         creators["dungeon clear hazard vacate"] = &DungeonClearActionContext::hazard_vacate;
         creators["dungeon clear hor stay ahead"] = &DungeonClearActionContext::hor_stay_ahead;
         creators["dungeon clear oc rider"] = &DungeonClearActionContext::oc_rider;
@@ -116,6 +117,7 @@ private:
     static Action* leader_assist(PlayerbotAI* ai) { return new DungeonClearLeaderAssistAction(ai); }
     static Action* regroup_combat(PlayerbotAI* ai) { return new DungeonClearRegroupCombatAction(ai); }
     static Action* heal_reposition(PlayerbotAI* ai) { return new DungeonClearHealRepositionAction(ai); }
+    static Action* member_guard(PlayerbotAI* ai) { return new DungeonClearMemberGuardAction(ai); }
     static Action* hazard_vacate(PlayerbotAI* ai) { return new DungeonClearHazardVacateAction(ai); }
     static Action* hor_stay_ahead(PlayerbotAI* ai) { return new DungeonClearHorStayAheadAction(ai); }
     static Action* oc_rider(PlayerbotAI* ai) { return new DungeonClearOculusRiderAction(ai); }
