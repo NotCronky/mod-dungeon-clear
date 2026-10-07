@@ -104,10 +104,16 @@ bool DungeonClearMcDouseRuneAction::Execute(Event /*event*/)
         return false;
     if (!bot->IsWithinDistInMap(rune, DcMcRunes::USE_RANGE))
     {
-        return DcMoveTo(bot->GetMapId(), rune->GetPositionX(), rune->GetPositionY(),
-                        rune->GetPositionZ(), /*idle*/ false, /*react*/ false,
-                        /*normal_only*/ false, /*exact_waypoint*/ false,
-                        MovementPriority::MOVEMENT_NORMAL);
+        bool const moved = DcMoveTo(bot->GetMapId(), rune->GetPositionX(), rune->GetPositionY(),
+                                    rune->GetPositionZ(), /*idle*/ false, /*react*/ false,
+                                    /*normal_only*/ false, /*exact_waypoint*/ false,
+                                    MovementPriority::MOVEMENT_NORMAL);
+        // Own the tick while the walk is in flight: the re-issued move is refused
+        // as a duplicate, and a false here handed the tick to Advance, which
+        // turned the leader back toward the next boss. On a long walk the two
+        // took turns and the leader never moved (Sulfuron's rune, 50yd off the
+        // route to Golemagg: stalled, tr-20261007-184710-1).
+        return moved || bot->isMoving() || DcMoveDeferred(MovementPriority::MOVEMENT_NORMAL);
     }
     bot->SetFacingToObject(rune);
     rune->Use(bot);
