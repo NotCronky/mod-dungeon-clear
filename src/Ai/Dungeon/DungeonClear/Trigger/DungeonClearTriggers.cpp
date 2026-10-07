@@ -5,6 +5,7 @@
 
 #include "DungeonClearTriggers.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcBossStandDown.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcMemberGuard.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
 
 #include <algorithm>
@@ -2151,6 +2152,12 @@ bool DungeonClearHealRepositionTrigger::IsActive()
     // sight, or beyond heal range.
     float const healRange = botAI->GetRange("heal");
     return !bot->IsWithinLOSInMap(target) || bot->GetExactDist2d(target) > healRange;
+}
+
+bool DungeonClearMemberGuardTrigger::IsActive()
+{
+    DcMemberGuard::Result r;
+    return DcMemberGuard::Evaluate(bot, context, r);
 }
 
 bool DungeonClearHazardVacateTrigger::IsActive()

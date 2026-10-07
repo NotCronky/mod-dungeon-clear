@@ -310,6 +310,13 @@ void DungeonClearStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "dungeon clear hazard vacate",
         { NextAction("dungeon clear hazard vacate", DcRel::HazardVacate) }));
+    // Member proximity guard: a follower inside an idle pack's aggro steps out
+    // (DcMemberGuard). Both engines: in combat for healers and ranged, out of
+    // combat (rest, loot, drink) for every follower. See DcRel::MemberGuard.
+    triggers.push_back(new TriggerNode(
+        "dungeon clear member guard",
+        { NextAction("dungeon clear member guard", DcRel::MemberGuard) }));
+
 
     // Halls of Reflection only: while the escape is running, step FORWARD out of
     // the Lich King's ring rather than radially away from it. Registered in BOTH
@@ -572,6 +579,13 @@ void DungeonClearCombatStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
     triggers.push_back(new TriggerNode(
         "dungeon clear hazard vacate",
         { NextAction("dungeon clear hazard vacate", DcRel::HazardVacate) }));
+    // Member proximity guard: a follower inside an idle pack's aggro steps out
+    // (DcMemberGuard). Both engines: in combat for healers and ranged, out of
+    // combat (rest, loot, drink) for every follower. See DcRel::MemberGuard.
+    triggers.push_back(new TriggerNode(
+        "dungeon clear member guard",
+        { NextAction("dungeon clear member guard", DcRel::MemberGuard) }));
+
 
     // Halls of Reflection only: while the escape is running, step FORWARD out of
     // the Lich King's ring rather than radially away from it. Registered in BOTH

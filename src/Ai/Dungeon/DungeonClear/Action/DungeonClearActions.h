@@ -812,6 +812,22 @@ public:
 // blocked it fans the away-bearing around until one validates. MOVEMENT_COMBAT
 // priority so it overrides the bot's MoveChase / advance. Driven by
 // DungeonClearHazardVacateTrigger.
+// Member proximity guard: step out of the idle pack's aggro, past it by
+// DungeonClear.ProximityGuardHysteresis, toward the tank when straight away would
+// walk into another pack. Driven by DungeonClearMemberGuardTrigger.
+class DungeonClearMemberGuardAction : public DcMovementAction
+{
+public:
+    DungeonClearMemberGuardAction(PlayerbotAI* botAI)
+        : DcMovementAction(botAI, "dungeon clear member guard")
+    {
+    }
+    bool Execute(Event event) override;
+
+private:
+    uint32 _lastLogMs{0};
+};
+
 class DungeonClearHazardVacateAction : public DcMovementAction
 {
 public:

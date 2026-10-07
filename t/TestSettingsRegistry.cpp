@@ -149,9 +149,12 @@ TEST(DcSettingsRegistryTest, RaidProfileIsExactlyTheScaleSet)
     // to fail here and be justified. Keep in step with the RAID DEFAULTS block
     // in mod_dungeon_clear.conf.dist. (Plan B/C keys — quorum, muster budgets —
     // join this list when they land with authored raid values.)
+    // ProximityGuard is the one behaviour row: a new feature rolled out on
+    // raids first (dc-live-threat-map plan, phase 3), not a scale number.
     std::vector<std::string> const expected{
         "PartyMaxSpread",
         "PostCombatRezTimeoutSecs",
+        "ProximityGuard",
     };
 
     std::vector<std::string> actual;

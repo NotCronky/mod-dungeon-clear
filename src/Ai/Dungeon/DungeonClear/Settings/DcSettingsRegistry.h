@@ -369,6 +369,12 @@ inline constexpr DcSettingDef kDcSettings[] =
     // Read the instance-wide threat map (Util/DcThreatMap.h) instead of the
     // tank-centred far-target scan where a consumer has been moved onto it.
     { "ThreatMap",             DcType::Bool,   1,   0,    1,  false },
+    // Member proximity guard (DcMemberGuard): followers step out of an idle
+    // pack's aggro reach + margin, to reach + margin + hysteresis. Raids only for
+    // now (the raid layer); 5-mans keep today's behaviour until MC proves it.
+    { "ProximityGuard",           DcType::Bool,  0, 0,  1, true, kDcNoHeroic, 1 },
+    { "ProximityGuardMargin",     DcType::Float, 2, 0, 10, true },
+    { "ProximityGuardHysteresis", DcType::Float, 3, 0, 10, true },
     { "RoomClearTimeout",      DcType::UInt, 180,   0,  600,  true  },
     // Extra yards added to a room-aggro boss's avoid-sphere when the tank routes
     // AROUND it to reach a trash pack (DcEngageGeometry::AggroSafeApproachPoint).

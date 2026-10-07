@@ -19,6 +19,7 @@
 #include "Creature.h"
 #include "DBCStores.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcFormation.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcMemberGuard.h"
 #include "GameObject.h"
 #include "Group.h"
 #include "Log.h"
@@ -1726,6 +1727,33 @@ bool DungeonClearHealRepositionAction::Execute(Event /*event*/)
     DcMoveTo(map->GetId(), dx, dy, dz, /*idle*/ false, /*react*/ false,
            /*normal_only*/ false, /*exact_waypoint*/ false, prio);
     return true;
+}
+
+bool DungeonClearMemberGuardAction::Execute(Event /*event*/)
+{
+    DcMemberGuard::Result r;
+    if (!DcMemberGuard::Evaluate(bot, context, r))
+        return false;
+
+    uint32 const now = getMSTime();
+    if (!_lastLogMs || now - _lastLogMs >= 5000)
+    {
+        _lastLogMs = now ? now : 1;
+        Creature const* mob = bot->GetMap()->GetCreature(r.worst);
+        LOG_INFO("playerbots.dungeonclear",
+                 "[DC:{}] member guard: {} (entry {}) idle at {:.1f}yd, aggro reach {:.1f}yd -> stepping to "
+                 "({:.1f},{:.1f},{:.1f}){}",
+                 bot->GetName(), mob ? mob->GetName() : "?", mob ? mob->GetEntry() : 0u, r.worstDist,
+                 r.worstReach, r.decision.destX, r.decision.destY, r.decision.destZ,
+                 bot->IsInCombat() ? " [in combat]" : "");
+    }
+
+    MovementPriority const prio =
+        bot->IsInCombat() ? MovementPriority::MOVEMENT_COMBAT : MovementPriority::MOVEMENT_NORMAL;
+    bool const moved = DcMoveTo(bot->GetMapId(), r.decision.destX, r.decision.destY, r.decision.destZ,
+                                /*idle*/ false, /*react*/ false, /*normal_only*/ false, /*exact_waypoint*/ false,
+                                prio);
+    return moved || bot->isMoving() || DcMoveDeferred(prio);
 }
 
 bool DungeonClearHazardVacateAction::Execute(Event /*event*/)
