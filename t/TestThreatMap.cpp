@@ -134,3 +134,30 @@ TEST(DcThreatMapPatrol, NoPathOrNoSpeedIsNever)
     EXPECT_EQ(PatrolEtaSec({}, 0, 0, 0, 2.0f, 50, 50, 0, 10, 15, 500), kNever);
     EXPECT_EQ(PatrolEtaSec(Square(), 0, 0, 0, 0.0f, 50, 50, 0, 10, 15, 500), kNever);
 }
+
+TEST(DcThreatMapPatrol, ClearWindowIsTheLongestStretchAway)
+{
+    // The square loop is 400yd; a 10yd circle at (50,0) covers ~20yd of the
+    // south edge, so ~380yd of the loop is clear: 190s at 2yd/s.
+    float const w = PatrolClearWindowSec(Square(), 2.0f, 50, 0, 0, 10, 15);
+    EXPECT_NEAR(w, 190.0f, 3.0f);
+}
+
+TEST(DcThreatMapPatrol, ALoopThatNeverLeavesHasNoWindow)
+{
+    // Lucifron's case: the radius swallows the whole loop.
+    EXPECT_FLOAT_EQ(PatrolClearWindowSec(Square(), 2.0f, 50, 50, 0, 100, 15), 0.0f);
+}
+
+TEST(DcThreatMapPatrol, ALoopThatNeverComesNearNeedsNoWindow)
+{
+    EXPECT_EQ(PatrolClearWindowSec(Square(), 2.0f, 500, 500, 0, 10, 15), kNever);
+}
+
+TEST(DcThreatMapPatrol, TheWindowWrapsRoundTheLoop)
+{
+    // The circle sits on the loop's start point, so the clear stretch runs past
+    // the end of the waypoint list and wraps: it must still read as one window.
+    float const w = PatrolClearWindowSec(Square(), 2.0f, 0, 0, 0, 10, 15);
+    EXPECT_NEAR(w, 190.0f, 3.0f);
+}

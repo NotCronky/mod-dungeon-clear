@@ -160,6 +160,8 @@ std::optional<DungeonBossInfo> NextDungeonBossValue::Calculate()
                     invalid = true;
                 else if (DcAnchorDoneByInstanceScript(info, inst))
                     invalid = true;
+                else if (DcAnchorDoneByGameObject(info, map))
+                    invalid = true;
 
                 if (!invalid)
                 {
@@ -243,6 +245,9 @@ std::optional<DungeonBossInfo> NextDungeonBossValue::Calculate()
         // a GetData value (Karazhan's chess) — live, so an unsaved one that reads
         // NOT_STARTED again after a reload is a candidate again.
         if (DcAnchorDoneByInstanceScript(info, inst))
+            continue;
+        // A used-up gameobject (a doused Firelord rune) finishes its objective.
+        if (DcAnchorDoneByGameObject(info, map))
             continue;
 
         BossLiveState const state = LookupLive(liveness, info.entry);

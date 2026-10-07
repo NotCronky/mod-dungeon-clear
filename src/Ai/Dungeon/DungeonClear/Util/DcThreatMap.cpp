@@ -233,6 +233,11 @@ std::optional<DcPatrolArrival> DcThreatMap::NextPatrollingBoss(float x, float y,
                                                           BossSpawnIndex::PatrolThreatHeightBand, horizonSec);
         if (eta == DcThreatMapKernel::kNever)
             continue;
+        // Waiting only helps when the loop leaves a gap the fight fits in.
+        float const window = DcThreatMapKernel::PatrolClearWindowSec(e.path, e.walkSpeed, x, y, z, radius,
+                                                                    BossSpawnIndex::PatrolThreatHeightBand);
+        if (window != DcThreatMapKernel::kNever && window < horizonSec)
+            continue;
         if (!soonest || eta < soonest->etaSec)
             soonest = DcPatrolArrival{&e, eta};
     }

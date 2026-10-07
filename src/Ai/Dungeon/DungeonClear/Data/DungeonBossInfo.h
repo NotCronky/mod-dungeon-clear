@@ -95,6 +95,16 @@ struct DungeonBossInfo
     int32 doneInstanceDataId{-1};
     uint32 doneInstanceDataValue{0};
 
+    // Objective only: completion via a GAMEOBJECT that has been used up — the
+    // anchor is finished while a spawned gameobject of this entry is ACTIVE and
+    // NOT_SELECTABLE. Molten Core's Firelord runes are the case: a boss kill makes
+    // its rune active and selectable, the douse flags it again, and nothing else
+    // records the douse anywhere DC can read (the instance script keeps it in a
+    // private map). Read live, like the instance-script rungs; a gameobject in an
+    // unloaded grid is not done, so the clear walks there and loads it. 0 => not
+    // used. See DcAnchorDoneByGameObject.
+    uint32 doneGoEntry{0};
+
     // Clear-ORDER override. When >= 0 the clear orders this anchor by this value
     // INSTEAD of encounterIndex, while completion still keys on encounterIndex
     // (the real DBC kill-bit, untouched). Lets a roster patch reorder a real

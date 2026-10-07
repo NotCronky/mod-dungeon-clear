@@ -6,7 +6,9 @@
 #ifndef _PLAYERBOT_DCANCHORDONE_H
 #define _PLAYERBOT_DCANCHORDONE_H
 
+#include "GameObject.h"
 #include "InstanceScript.h"
+#include "Map.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h"
 
 // The instance-script half of anchor completion — an anchor's own boss-state
@@ -36,6 +38,19 @@ inline DcAnchorDoneVia DcAnchorDoneByInstance(DungeonBossInfo const& info, Insta
 inline bool DcAnchorDoneByInstanceScript(DungeonBossInfo const& info, InstanceScript const* inst)
 {
     return DcAnchorDoneByInstance(info, inst) != DcAnchorDoneVia::None;
+}
+
+// The gameobject rung (DungeonBossInfo::doneGoEntry): finished while a spawned
+// gameobject of that entry is ACTIVE and NOT_SELECTABLE — used up.
+inline bool DcAnchorDoneByGameObject(DungeonBossInfo const& info, Map* map)
+{
+    if (!info.doneGoEntry || !map)
+        return false;
+    for (auto const& [spawnId, go] : map->GetGameObjectBySpawnIdStore())
+        if (go && go->GetEntry() == info.doneGoEntry && go->isSpawned() &&
+            go->GetGoState() == GO_STATE_ACTIVE && go->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
+            return true;
+    return false;
 }
 
 #endif  // _PLAYERBOT_DCANCHORDONE_H

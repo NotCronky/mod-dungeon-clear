@@ -6,6 +6,7 @@
 #ifndef _PLAYERBOT_DCTHREATMAPKERNEL_H
 #define _PLAYERBOT_DCTHREATMAPKERNEL_H
 
+#include <algorithm>
 #include <cmath>
 #include <numeric>
 #include <vector>
@@ -194,6 +195,61 @@ namespace DcThreatMapKernel
             i = (i + 1) % n;
         }
         return kNever;
+    }
+
+    // The longest stretch of the loop, in seconds at `speed`, the patroller
+    // spends OUTSIDE `radius` (2D, inside `heightBand`) of the target: the
+    // biggest window a fight there can fit between two of its passes. A loop
+    // that never comes near returns kNever (no window needed). Shorter than the
+    // fight means waiting never helps: Lucifron walks a small loop around his
+    // own Core Hounds, and a hold for him only ran out its cap
+    // (tr-20261007-222010-1).
+    inline float PatrolClearWindowSec(std::vector<PathPoint> const& path, float speed, float tx, float ty, float tz,
+                                      float radius, float heightBand)
+    {
+        std::size_t const n = path.size();
+        if (n < 2 || speed <= 0.0f)
+            return kNever;
+        std::vector<bool> outside;
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            PathPoint const& a = path[i];
+            PathPoint const& b = path[(i + 1) % n];
+            float const ex = b.x - a.x;
+            float const ey = b.y - a.y;
+            float const ez = b.z - a.z;
+            float const len = std::sqrt(ex * ex + ey * ey + ez * ez);
+            for (float d = 0.0f; d < len || (len <= 0.0f && d == 0.0f); d += kPathSampleYd)
+            {
+                float const f = len > 0.0f ? d / len : 0.0f;
+                float const px = a.x + ex * f - tx;
+                float const py = a.y + ey * f - ty;
+                float const pz = a.z + ez * f;
+                outside.push_back(px * px + py * py > radius * radius || std::fabs(pz - tz) > heightBand);
+                if (len <= 0.0f)
+                    break;
+            }
+        }
+        std::size_t const m = outside.size();
+        std::size_t insideCount = 0;
+        for (bool o : outside)
+            insideCount += o ? 0 : 1;
+        if (insideCount == 0)
+            return kNever;
+        // Longest cyclic run of `outside`, starting the scan just after an inside sample.
+        std::size_t start = 0;
+        while (outside[start])
+            ++start;
+        std::size_t best = 0;
+        std::size_t run = 0;
+        for (std::size_t k = 1; k <= m; ++k)
+        {
+            if (outside[(start + k) % m])
+                best = std::max(best, ++run);
+            else
+                run = 0;
+        }
+        return static_cast<float>(best) * kPathSampleYd / speed;
     }
 
     // Is a refresh due? `lastMs` is 0 before the first one. Wrap-safe on the
