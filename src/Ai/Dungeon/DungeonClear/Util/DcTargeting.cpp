@@ -1296,16 +1296,23 @@ bool DcTargeting::RoomClearForcesAdvanced(Player* bot, AiObjectContext* ctx, Uni
     if (!room || room->pullOutRadius <= 0.0f)
         return false;
 
-    // A pack of this room's trash is dragged wherever the verdict is taken. The
+    // A pack inside this room is dragged wherever the verdict is taken. The
     // window below is measured from the TANK, and the clear walks out to a far
     // pack from wherever the last fight ended: Garr's pre-clear sized the south
     // Lava Annihilator from the east one's corpse, 98yd from Garr and outside
     // the window, ran in on a Leeroy verdict and fought 13 mobs, Garr and his
     // Firesworn among them (tr-20261007-174713-1).
+    //
+    // Measured from the boss, not looked up in the room-trash list: that list is
+    // built from the tank's far-target scan, and a pack at the edge of the tank's
+    // visibility drops in and out of it from one tick to the next. The same
+    // Annihilator was sized on a tick it was missing and pulled where it stood
+    // again (tr-20261007-201839-1).
     if (target)
     {
-        GuidVector const& trash = ctx->GetValue<GuidVector>(DcKey::RoomTrashRemaining)->Get();
-        if (std::find(trash.begin(), trash.end(), target->GetGUID()) != trash.end())
+        Creature* const boss = GetLiveBoss(bot, ctx, next->entry);
+        if (boss && boss->IsAlive() && target != boss && target->GetMapId() == boss->GetMapId() &&
+            boss->GetExactDist(target) <= room->radius)
             return true;
     }
 

@@ -287,7 +287,7 @@ public:
     // FORCE the advanced verdict for the room (see DcPullPlanner::UpdateDynamicPull-
     // Mode). Leader/room-scoped; cheap (a registry Find + the IsRoomClearActive
     // probe already run for the pull path). Also true, window or not, when
-    // `target` is one of that room's remaining trash.
+    // `target` stands within the room radius of the live boss.
     static bool RoomClearForcesAdvanced(Player* bot, AiObjectContext* ctx, Unit* target = nullptr);
 
     // The widened avoid-sphere skirt (yd) of the room-aggro boss currently being
