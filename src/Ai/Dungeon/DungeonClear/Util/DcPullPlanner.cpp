@@ -888,6 +888,7 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         obs.patrolWaitEnabled = patrolWaitEnabled;
         obs.patrolContended =
             cls.fullCount > cls.ceiling && cls.reducedCount <= cls.ceiling;
+        obs.forced = forceAdv;
 
         // Only AT commit range do we run (and latch) the patrol-wait clock, exactly
         // as the live gate did. patrolWaitExpired = ShouldWaitForPatrol said proceed.

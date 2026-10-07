@@ -50,6 +50,7 @@ namespace
         EXPECT_EQ(a.atCommitRange, b.atCommitRange);
         EXPECT_EQ(a.patrolContended, b.patrolContended);
         EXPECT_EQ(a.patrolWaitExpired, b.patrolWaitExpired);
+        EXPECT_EQ(a.forced, b.forced);
     }
 
     // A spread of records across the governor's outcomes for the round-trip test.

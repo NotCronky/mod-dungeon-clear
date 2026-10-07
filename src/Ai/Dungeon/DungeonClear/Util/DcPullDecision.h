@@ -66,6 +66,8 @@ namespace DcPullDecision
         bool atCommitRange     = false;  // tank within PullCommitRange of the pack
         bool patrolContended   = false;  // fullCount > ceiling && reducedCount <= ceiling
         bool patrolWaitExpired = false;  // at commit: ShouldWaitForPatrol() said proceed
+        bool forced            = false;  // Advanced by a hard rule (room pull-out, bystander
+                                         // pack, PullForceAdvanced), not by the estimate
     };
 
     // Returns the verdict the governor should apply (or NoOp to leave the
