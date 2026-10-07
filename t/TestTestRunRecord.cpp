@@ -141,11 +141,12 @@ TEST(DcTestRunRecordTest, DeathsSerializeWhoDiedAndToWhat)
     EXPECT_NE(line.find("\"deaths\":[{\"t\":410,\"name\":\"Bero\",\"opponent\":\"Anzu\","
                         "\"opponentEntry\":23035,\"onBoss\":true,\"killedBy\":\"Brood of Anzu\","
                         "\"killedByEntry\":23132,\"killedBySpell\":0,\"killedBySpellName\":\"\","
-                        "\"killingBlow\":2140},"
+                        "\"killingBlow\":2140,\"x\":0,\"y\":0,\"z\":0},"
                         "{\"t\":413,\"name\":\"Olanne\",\"opponent\":\"Anzu\","
                         "\"opponentEntry\":23035,\"onBoss\":true,\"killedBy\":\"Anzu\","
                         "\"killedByEntry\":23035,\"killedBySpell\":40184,"
-                        "\"killedBySpellName\":\"Spell Bomb\",\"killingBlow\":3300}]"),
+                        "\"killedBySpellName\":\"Spell Bomb\",\"killingBlow\":3300,"
+                        "\"x\":0,\"y\":0,\"z\":0}]"),
               std::string::npos);
     EXPECT_EQ(Count(line, "\"name\":\"Olanne\""), 1u);
 }
@@ -181,7 +182,7 @@ TEST(DcTestRunRecordTest, BossRosterSerializesInProgressionOrder)
               std::string::npos);
 }
 
-TEST(DcTestRunRecordTest, SchemaIsSixteen)
+TEST(DcTestRunRecordTest, SchemaIsSeventeen)
 {
     // 12: added combatHolders[].trigger, and with it a change of meaning in the
     // sibling `legitimate` field — a trigger creature now sinks the verdict.
@@ -190,7 +191,8 @@ TEST(DcTestRunRecordTest, SchemaIsSixteen)
     // 14: added comp[].rotation / unusedSpells (the rotation census).
     // 15: added comp[].damage / healing / activeS (the damage and healing meter).
     // 16: added deaths[].killedBy / killedByEntry / killedBySpell / killedBySpellName / killingBlow.
-    EXPECT_NE(ToJsonl(SampleRecord()).find("\"schema\":16"), std::string::npos);
+    // 17: added deaths[].x / y / z.
+    EXPECT_NE(ToJsonl(SampleRecord()).find("\"schema\":17"), std::string::npos);
     EXPECT_NE(ToJsonl(SampleRecord()).find("\"size\":"), std::string::npos);
 }
 

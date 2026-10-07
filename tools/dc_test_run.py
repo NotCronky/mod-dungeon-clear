@@ -697,11 +697,13 @@ def render_deaths(rec):
         def blow(d):
             spell = d.get("killedBySpellName") or ("melee" if d.get("killedBy") != "environment" else "")
             return f"{spell} {d.get('killingBlow', 0)}".strip()
+        def where(d):
+            return f"{d['x']:.0f},{d['y']:.0f},{d['z']:.0f}" if "x" in d else ""
         rows = [[mmss(d.get("t")), d.get("name", "?"), d.get("killedBy") or "?",
-                 d.get("killedByEntry") or "", blow(d), d.get("opponent", ""),
+                 d.get("killedByEntry") or "", blow(d), where(d), d.get("opponent", ""),
                  "ON BOSS" if d.get("onBoss") else ""]
                 for d in deaths]
-        return table(rows, ["at", "who", "killed by", "entry", "hit", "engaged", ""])
+        return table(rows, ["at", "who", "killed by", "entry", "hit", "where", "engaged", ""])
     rows = [[mmss(d.get("t")), d.get("name", "?"), d.get("opponent", "?"),
              d.get("opponentEntry", ""), "ON BOSS" if d.get("onBoss") else ""]
             for d in deaths]

@@ -110,6 +110,7 @@ namespace DcTestRunRecord
         std::uint32_t killedBySpell = 0;
         std::string killedBySpellName;
         std::uint32_t killingBlow = 0;
+        float x = 0.0f, y = 0.0f, z = 0.0f;   // where they died
     };
 
     // One pull the Dynamic governor took a verdict on, with what the classifier
@@ -182,7 +183,8 @@ namespace DcTestRunRecord
         // 16: added deaths[].killedBy / killedByEntry / killedBySpell /
         //     killedBySpellName / killingBlow — the real killing hit, where
         //     `opponent` is only what the party was engaged with.
-        std::uint32_t schema = 16;
+        // 17: added deaths[].x / y / z — where they died.
+        std::uint32_t schema = 17;
         std::string runId;
         std::string planId;       // owning `.dc test plan`, "" for ad-hoc runs
         std::string dungeon;      // registry token

@@ -206,7 +206,8 @@ namespace DcTestRunRecord
             s << ",\"killedByEntry\":" << d.killedByEntry << ",\"killedBySpell\":" << d.killedBySpell
               << ",\"killedBySpellName\":";
             AppendEscaped(s, d.killedBySpellName);
-            s << ",\"killingBlow\":" << d.killingBlow << '}';
+            s << ",\"killingBlow\":" << d.killingBlow << ",\"x\":" << d.x << ",\"y\":" << d.y
+              << ",\"z\":" << d.z << '}';
         }
         s << "],\"pulls\":[";
         for (std::size_t i = 0; i < rec.pulls.size(); ++i)
