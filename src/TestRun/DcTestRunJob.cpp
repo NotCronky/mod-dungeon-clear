@@ -51,6 +51,7 @@
 #include "Util/DcPoolBots.h"
 #include "Util/DcProvisionBudget.h"
 #include "Ai/Dungeon/DungeonClear/Action/DcActionShared.h"
+#include "Ai/Dungeon/DungeonClear/Action/DcMoltenCoreRunes.h"
 #include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonWingRegistry.h"
@@ -1644,6 +1645,41 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
     {
         _bossStart = BossStart::Done;
         return true;
+    }
+
+    // A focus boss with no spawn row is summoned by the instance script once
+    // the bosses before it are down (Molten Core's Majordomo Executus). Kill
+    // those outright, then let the dungeon's own prep finish the summon.
+    bool const focusSpawned = std::any_of(
+        sObjectMgr->GetAllCreatureData().begin(), sObjectMgr->GetAllCreatureData().end(),
+        [&](auto const& kv) { return kv.second.mapid == _mapId && kv.second.id == focus->entry; });
+    if (!focusSpawned)
+    {
+        uint32 const focusKey = BossOrderKey(*focus);
+        uint32 killedBosses = 0;
+        for (DungeonBossInfo const& b : bosses)
+        {
+            if (b.kind != DungeonAnchorKind::Boss || BossOrderKey(b) >= focusKey)
+                continue;
+            for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+            {
+                if (data.mapid != _mapId || data.id != b.entry)
+                    continue;
+                map->LoadGrid(data.posX, data.posY);
+                auto const bounds = map->GetCreatureBySpawnIdStore().equal_range(spawnId);
+                for (auto it = bounds.first; it != bounds.second; ++it)
+                    if (it->second->IsAlive())
+                    {
+                        it->second->KillSelf(false);
+                        ++killedBosses;
+                    }
+            }
+        }
+        std::string prep;
+        if (_mapId == DcMoltenCore::MAP_ID && focus->entry == DcMoltenCore::NPC_MAJORDOMO)
+            prep = "; " + DcMoltenCore::ForceMajordomo(map, tank);
+        LOG_INFO("playerbots.dungeonclear", "TESTRUN {} boss start: {} has no spawn — killed {} earlier bosses{}",
+                 _record.runId, focus->name, killedBosses, prep);
     }
 
     // The trash is found from the SPAWN table, not from what the map has loaded:
