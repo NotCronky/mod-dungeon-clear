@@ -8,11 +8,13 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 #include "Define.h"
 #include "ObjectGuid.h"
+#include "DcThreatMapKernel.h"
 
 class Map;
 
@@ -64,6 +66,15 @@ struct DcThreatEntry
     bool evading{false};
     bool patrols{false};      // waypoint movement in its spawn data
     bool boss{false};         // an encounter boss of this instance
+    // Patrollers only: the waypoint loop and walk speed (yd/s, live when loaded).
+    std::vector<DcThreatMapKernel::PathPoint> path;
+    float walkSpeed{0.0f};
+};
+
+struct DcPatrolArrival
+{
+    DcThreatEntry const* who{nullptr};
+    float etaSec{0.0f};
 };
 
 class DcThreatMap
@@ -89,6 +100,11 @@ public:
 
     // Living entries sharing `packId`.
     std::vector<DcThreatEntry const*> PackMembers(uint32 packId) const;
+
+    // The patrolling boss, not yet in combat, that its loop brings within
+    // `radius` of the point soonest, if one does within `horizonSec`.
+    std::optional<DcPatrolArrival> NextPatrollingBoss(float x, float y, float z, float radius,
+                                                       float horizonSec) const;
 
     uint32 LastRefreshMs() const { return _lastRefreshMs; }
 

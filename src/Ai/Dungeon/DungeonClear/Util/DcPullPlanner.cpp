@@ -7,6 +7,7 @@
 
 #include "Ai/Dungeon/DungeonClear/Util/DcFormation.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcThreatMap.h"
 
 #include "DungeonClearUtil.h"   // DC_PULL_* macros + DcTargeting::GetPullTarget (until DcTargeting moves)
 
@@ -816,6 +817,49 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
     // dungeons": forcing Advanced reshapes how every fight in a dungeon happens,
     // and only the Stockade has the run data to justify it so far. See
     // RouteSweepRegistry.h.
+    // A PATROLLING BOSS due through this fight: hold until his loop has carried
+    // him past. The pull estimate sizes the packs standing there now; a boss on a
+    // waypoint loop is not standing anywhere, and Baron Geddon's loop runs from
+    // his ledge down through Shazzrah's room. The raid Leeroyed a Firewalker
+    // pack under it, he walked into the fight and wiped them
+    // (tr-20261007-213207-1). The threat map knows his live position, his loop
+    // and his walk speed, so ask when he next comes within the clearance of the
+    // pack, and hold (decision 3: the tank stops at commit range, nobody tags)
+    // while that is inside the time a fight takes. Capped by
+    // PullPatrolBossHoldSec so a loop that never clears cannot stall the run.
+    {
+        float const clearance = DcSettings::GetFloat(bot, "PullPatrolBossClearance");
+        DcThreatMap const* threatMap = clearance > 0.0f && DcSettings::GetBool(bot, "ThreatMap")
+            ? DcThreatMap::Get(bot->GetMap()) : nullptr;
+        std::optional<DcPatrolArrival> const due = threatMap
+            ? threatMap->NextPatrollingBoss(target->GetPositionX(), target->GetPositionY(),
+                                            target->GetPositionZ(), clearance,
+                                            DcSettings::GetFloat(bot, "PullPatrolBossFightSec"))
+            : std::nullopt;
+        uint32 const now = getMSTime();
+        uint32 const capMs = static_cast<uint32>(DcSettings::GetFloat(bot, "PullPatrolBossHoldSec") * 1000.0f);
+        if (due && due->who->entry != target->GetEntry() &&
+            (!pull.patrolBossHoldSince || now - pull.patrolBossHoldSince < capMs))
+        {
+            if (!pull.patrolBossHoldSince)
+                pull.patrolBossHoldSince = now ? now : 1;
+            if (!pull.patrolBossHoldLogMs || now - pull.patrolBossHoldLogMs >= 5000)
+            {
+                pull.patrolBossHoldLogMs = now ? now : 1;
+                CreatureTemplate const* ct = sObjectMgr->GetCreatureTemplate(due->who->entry);
+                DC_PULL_INFO("[DC:{}] patrol-boss hold: {} ({}) due within {:.0f}yd of {} (entry {}) in "
+                             "{:.0f}s -> holding the pull ({}s so far)",
+                             bot->GetName(), ct ? ct->Name : "?", due->who->entry, clearance,
+                             target->GetName(), target->GetEntry(), due->etaSec,
+                             (now - pull.patrolBossHoldSince) / 1000u);
+            }
+            apply(false, DcPullDecisionCode::PatrolHold);
+            return;
+        }
+        if (!due)
+            pull.patrolBossHoldSince = 0;
+    }
+
     bool const insideNeighbour =
         DcEngageGeometry::EnRouteSweepApplies(bot) &&
         DcEngageGeometry::TargetInsideBystanderPack(bot, target);

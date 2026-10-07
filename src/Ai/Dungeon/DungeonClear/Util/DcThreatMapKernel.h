@@ -110,6 +110,92 @@ namespace DcThreatMapKernel
         return {(x1 - x0) / dt, (y1 - y0) / dt};
     }
 
+    struct PathPoint
+    {
+        float x{0.0f};
+        float y{0.0f};
+        float z{0.0f};
+    };
+
+    inline constexpr float kNever = -1.0f;
+    // Step along the path when sampling it, yards.
+    inline constexpr float kPathSampleYd = 2.0f;
+
+    // Seconds until a patroller walking its CYCLIC waypoint loop `path` from
+    // (x,y,z) at `speed` yd/s first comes within `radius` (2D, inside
+    // `heightBand`) of the target point; 0 if it already is; kNever if not within
+    // `horizonSec`. The patroller is placed on its nearest path segment and walks
+    // forward (waypoint order), which is how a MovementType 2 creature loops.
+    inline float PatrolEtaSec(std::vector<PathPoint> const& path, float x, float y, float z, float speed,
+                              float tx, float ty, float tz, float radius, float heightBand, float horizonSec)
+    {
+        auto within = [&](float px, float py, float pz)
+        {
+            float const dx = px - tx;
+            float const dy = py - ty;
+            return dx * dx + dy * dy <= radius * radius && std::fabs(pz - tz) <= heightBand;
+        };
+        if (within(x, y, z))
+            return 0.0f;
+        std::size_t const n = path.size();
+        if (n < 2 || speed <= 0.0f || horizonSec <= 0.0f)
+            return kNever;
+
+        // Nearest segment (i -> i+1, wrapping) and the projection onto it.
+        std::size_t seg = 0;
+        float segT = 0.0f;
+        float best = -1.0f;
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            PathPoint const& a = path[i];
+            PathPoint const& b = path[(i + 1) % n];
+            float const ex = b.x - a.x;
+            float const ey = b.y - a.y;
+            float const len2 = ex * ex + ey * ey;
+            float t = len2 > 0.0f ? ((x - a.x) * ex + (y - a.y) * ey) / len2 : 0.0f;
+            t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+            float const px = a.x + ex * t - x;
+            float const py = a.y + ey * t - y;
+            float const pz = a.z + (b.z - a.z) * t - z;
+            float const d2 = px * px + py * py + pz * pz;
+            if (best < 0.0f || d2 < best)
+            {
+                best = d2;
+                seg = i;
+                segT = t;
+            }
+        }
+
+        float const maxDist = speed * horizonSec;
+        float walked = 0.0f;
+        float t = segT;
+        std::size_t i = seg;
+        // A loop longer than the horizon ends the walk at maxDist; a short loop is
+        // walked round at most twice.
+        for (std::size_t steps = 0; steps < 2 * n + 1 && walked <= maxDist; ++steps)
+        {
+            PathPoint const& a = path[i];
+            PathPoint const& b = path[(i + 1) % n];
+            float const ex = b.x - a.x;
+            float const ey = b.y - a.y;
+            float const ez = b.z - a.z;
+            float const len = std::sqrt(ex * ex + ey * ey + ez * ez);
+            float d = t * len;
+            while (d <= len && walked <= maxDist)
+            {
+                float const f = len > 0.0f ? d / len : 0.0f;
+                if (within(a.x + ex * f, a.y + ey * f, a.z + ez * f))
+                    return walked / speed;
+                d += kPathSampleYd;
+                walked += kPathSampleYd;
+            }
+            walked -= d - len;  // the overshoot past this segment's end
+            t = 0.0f;
+            i = (i + 1) % n;
+        }
+        return kNever;
+    }
+
     // Is a refresh due? `lastMs` is 0 before the first one. Wrap-safe on the
     // 32-bit millisecond clock.
     inline bool RefreshDue(uint32 lastMs, uint32 nowMs, uint32 intervalMs)

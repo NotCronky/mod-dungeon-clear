@@ -87,3 +87,50 @@ TEST(DcThreatMapRefresh, SurvivesClockWrap)
     EXPECT_FALSE(RefreshDue(0xFFFFFF00u, 0x00000010u, 500));
     EXPECT_TRUE(RefreshDue(0xFFFFFF00u, 0x00000200u, 500));
 }
+
+namespace
+{
+    // A 100yd square loop, walked counter-clockwise from (0,0).
+    std::vector<PathPoint> Square()
+    {
+        return {{0, 0, 0}, {100, 0, 0}, {100, 100, 0}, {0, 100, 0}};
+    }
+}
+
+TEST(DcThreatMapPatrol, AlreadyWithinIsZero)
+{
+    EXPECT_FLOAT_EQ(PatrolEtaSec(Square(), 50, 0, 0, 2.5f, 55, 5, 0, 10, 15, 60), 0.0f);
+}
+
+TEST(DcThreatMapPatrol, AheadOnTheLoopArrivesAtWalkSpeed)
+{
+    // From (0,0) heading east, the target at (100,50) with a 10yd radius is first
+    // reached ~140yd along: 100 east + 40 north.
+    float const eta = PatrolEtaSec(Square(), 0, 0, 0, 2.0f, 100, 50, 0, 10, 15, 200);
+    EXPECT_NEAR(eta, 70.0f, 2.0f);
+}
+
+TEST(DcThreatMapPatrol, WalksForwardNotBack)
+{
+    // Just past (0,0) heading east: the target at (0,50) is behind it, reached
+    // only round the loop (~340yd), not 40yd back the way it came.
+    float const eta = PatrolEtaSec(Square(), 5, 0, 0, 2.0f, 0, 50, 0, 10, 15, 500);
+    EXPECT_GT(eta, 150.0f);
+}
+
+TEST(DcThreatMapPatrol, BeyondTheHorizonIsNever)
+{
+    EXPECT_EQ(PatrolEtaSec(Square(), 0, 0, 0, 2.0f, 100, 50, 0, 10, 15, 30), kNever);
+}
+
+TEST(DcThreatMapPatrol, AFloorAwayNeverArrives)
+{
+    // Geddon's ledge loop passing over a cave a floor below: close in 2D only.
+    EXPECT_EQ(PatrolEtaSec(Square(), 0, 0, 0, 2.0f, 50, 0, -30, 10, 15, 500), kNever);
+}
+
+TEST(DcThreatMapPatrol, NoPathOrNoSpeedIsNever)
+{
+    EXPECT_EQ(PatrolEtaSec({}, 0, 0, 0, 2.0f, 50, 50, 0, 10, 15, 500), kNever);
+    EXPECT_EQ(PatrolEtaSec(Square(), 0, 0, 0, 0.0f, 50, 50, 0, 10, 15, 500), kNever);
+}
