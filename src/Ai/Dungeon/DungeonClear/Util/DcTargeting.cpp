@@ -1280,7 +1280,7 @@ bool DcTargeting::IsPullbackBossDue(Player* bot, AiObjectContext* ctx)
     Creature* const boss = GetLiveBoss(bot, ctx, next->entry);
     return boss && boss->IsAlive();
 }
-bool DcTargeting::RoomClearForcesAdvanced(Player* bot, AiObjectContext* ctx)
+bool DcTargeting::RoomClearForcesAdvanced(Player* bot, AiObjectContext* ctx, Unit* target)
 {
     if (!bot || !ctx)
         return false;
@@ -1295,6 +1295,19 @@ bool DcTargeting::RoomClearForcesAdvanced(Player* bot, AiObjectContext* ctx)
     RoomAggroBoss const* room = RoomAggroRegistry::Find(bot->GetMapId(), next->entry);
     if (!room || room->pullOutRadius <= 0.0f)
         return false;
+
+    // A pack of this room's trash is dragged wherever the verdict is taken. The
+    // window below is measured from the TANK, and the clear walks out to a far
+    // pack from wherever the last fight ended: Garr's pre-clear sized the south
+    // Lava Annihilator from the east one's corpse, 98yd from Garr and outside
+    // the window, ran in on a Leeroy verdict and fought 13 mobs, Garr and his
+    // Firesworn among them (tr-20261007-174713-1).
+    if (target)
+    {
+        GuidVector const& trash = ctx->GetValue<GuidVector>(DcKey::RoomTrashRemaining)->Get();
+        if (std::find(trash.begin(), trash.end(), target->GetGUID()) != trash.end())
+            return true;
+    }
 
     return IsRoomClearActive(bot, ctx);
 }

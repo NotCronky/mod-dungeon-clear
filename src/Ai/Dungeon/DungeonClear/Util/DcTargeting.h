@@ -286,8 +286,9 @@ public:
     // inside the boss's wake radius, so the dynamic-pull governor reads this to
     // FORCE the advanced verdict for the room (see DcPullPlanner::UpdateDynamicPull-
     // Mode). Leader/room-scoped; cheap (a registry Find + the IsRoomClearActive
-    // probe already run for the pull path).
-    static bool RoomClearForcesAdvanced(Player* bot, AiObjectContext* ctx);
+    // probe already run for the pull path). Also true, window or not, when
+    // `target` is one of that room's remaining trash.
+    static bool RoomClearForcesAdvanced(Player* bot, AiObjectContext* ctx, Unit* target = nullptr);
 
     // The widened avoid-sphere skirt (yd) of the room-aggro boss currently being
     // pre-cleared, or 0 when no room-clear is active or that boss carries no skirt
