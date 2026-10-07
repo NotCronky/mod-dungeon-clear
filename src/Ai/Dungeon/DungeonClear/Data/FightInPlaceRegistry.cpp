@@ -121,6 +121,16 @@ namespace
         // x 738-767, y -1199..-1149; the box is that with ~20yd of margin, and no
         // other creature spawns inside it.
         { 409, 718.0f, 788.0f, -1220.0f, -1130.0f },
+        // Molten Core — Garr's cave (691, -498). The same Separation Anxiety: a
+        // Firesworn more than 40yd from Garr takes +300% damage and banish
+        // immunity. The two Ancient Core Hounds his room-aggro pre-clear goes
+        // after patrol within 18-46yd of him, so tagging one brings the whole
+        // pack, and an advanced pull then dragged Garr 60yd east while the
+        // banished Firesworn stayed home: 4-5k melee and 8k Eruptions wiped the
+        // raid (tr-20261007-163035-1). The box is Garr, the Firesworn and both
+        // hound patrols (x 668-728, y -544..-474), short of the Molten Destroyer
+        // and Lava Annihilator south of it (y -553).
+        { 409, 655.0f, 740.0f, -548.0f, -460.0f },
     };
 }
 
