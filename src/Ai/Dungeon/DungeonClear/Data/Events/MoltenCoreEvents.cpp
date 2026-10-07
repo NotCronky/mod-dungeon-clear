@@ -45,7 +45,9 @@
 //     through Shazzrah's room and can die ~240yd from his Rune of Zeth, so a
 //     travel objective at that rune follows him in the clear order and walks
 //     the raid back to it. Sulfuron, Golemagg and the finale move one key back
-//     to make room (their kill-bits are untouched).
+//     to make room (their kill-bits are untouched). Any other fight can drift
+//     too, so a rune sweep before Majordomo has an objective at every other
+//     rune, each done as soon as its rune is doused (doneGoEntry).
 //
 // Index-space note (the Drak'Tharon lesson, inverted): the two added bosses
 // use doneBossStateIndex — the ONE sanctioned GetBossState seam — because the
@@ -85,6 +87,26 @@ namespace
     constexpr uint32 kGolemagg = 11988;
     // Rune of Zeth (176952), Baron Geddon's.
     constexpr float kZethX = 748.8f, kZethY = -985.2f, kZethZ = -178.3f;
+    constexpr uint32 kRuneZeth = 176952;
+
+    // The rune sweep before Majordomo: every other rune, nearest Golemagg first.
+    // Each objective is done the moment its rune is doused (doneGoEntry), so the
+    // raid only walks to one the douse beside its corpse missed.
+    struct RuneAnchor
+    {
+        uint32 seq;      // OBJ() sequence
+        char const* name;
+        uint32 goEntry;
+        float x, y, z;
+    };
+    constexpr RuneAnchor kRuneSweep[] = {
+        {3, "Douse Rune of Theri", 176954, 795.5f, -974.3f, -207.8f},   // Golemagg
+        {4, "Douse Rune of Koro", 176951, 601.7f, -1174.6f, -196.1f},   // Sulfuron
+        {5, "Douse Rune of Mazj", 176953, 583.7f, -806.7f, -205.0f},    // Shazzrah
+        {6, "Douse Rune of Blaz", 176955, 694.2f, -495.6f, -214.3f},    // Garr
+        {7, "Douse Rune of Mohn", 176957, 897.1f, -551.5f, -204.0f},    // Gehennas
+        {8, "Douse Rune of Kress", 176956, 1132.1f, -1017.3f, -186.5f}, // Magmadar
+    };
 }
 
 void RegisterMoltenCoreEvents(std::vector<DungeonEvent>& out)
@@ -145,26 +167,44 @@ void RegisterMoltenCoreRoster(std::vector<BossRosterPatch>& t)
 
     // The statics keep their derived DBC order (bits 0-7 match the classic
     // clear path) up to Baron Geddon (5). His rune objective takes key 6, so
-    // Sulfuron and Golemagg follow at 7 and 8, and the finale after them.
+    // Sulfuron and Golemagg follow at 7 and 8. The rune sweep takes 9-14 and
+    // the finale follows it.
     p.reorder.push_back({kSulfuron, 7});
     p.reorder.push_back({kGolemagg, 8});
-    p.add.push_back(MakeObjective(OBJ(2), /*encounterIndex*/ 5, kMapId,
-                                  "Douse Rune of Zeth", kZethX, kZethY, kZethZ,
-                                  /*arriveRadius*/ 5.0f, /*gateEntry*/ 0,
-                                  /*hook*/ 0, /*eventId*/ 0,
-                                  /*orderOverride*/ 6));
+    DungeonBossInfo zeth = MakeObjective(OBJ(2), /*encounterIndex*/ 5, kMapId,
+                                         "Douse Rune of Zeth", kZethX, kZethY, kZethZ,
+                                         /*arriveRadius*/ 5.0f, /*gateEntry*/ 0,
+                                         /*hook*/ 0, /*eventId*/ 0,
+                                         /*orderOverride*/ 6);
+    zeth.doneGoEntry = kRuneZeth;
+    p.add.push_back(zeth);
+
+    // Majordomo is summoned only once all seven runes are doused. Shazzrah died
+    // ~100yd from his Rune of Mazj in a fight that drifted, the douse beside his
+    // corpse never came within reach, and the run stalled at an unsummoned
+    // Majordomo (tr-20261007-222010-1).
+    int32 order = 9;
+    for (RuneAnchor const& r : kRuneSweep)
+    {
+        DungeonBossInfo rune = MakeObjective(OBJ(r.seq), /*encounterIndex*/ 7, kMapId, r.name, r.x, r.y, r.z,
+                                             /*arriveRadius*/ 5.0f, /*gateEntry*/ 0, /*hook*/ 0,
+                                             /*eventId*/ 0, order++);
+        rune.doneGoEntry = r.goEntry;
+        p.add.push_back(rune);
+    }
+
     p.add.push_back(MakeBoss(kMajordomo, kMapId, "Majordomo Executus",
                              kMajX, kMajY, kMajZ, /*completionFrom*/ 0,
-                             /*orderOverride*/ 9, kSlotMajordomo));
+                             /*orderOverride*/ order++, kSlotMajordomo));
     p.add.push_back(MakeObjective(OBJ(1), /*encounterIndex*/ 9, kMapId,
                                   "Summon Ragnaros",
                                   kRagGossipX, kRagGossipY, kRagGossipZ,
                                   /*arriveRadius*/ 10.0f, /*gateEntry*/ kRagnaros,
                                   /*hook*/ 0, kEventSummonRagnaros,
-                                  /*orderOverride*/ 10));
+                                  /*orderOverride*/ order++));
     p.add.push_back(MakeBoss(kRagnaros, kMapId, "Ragnaros",
                              kRagX, kRagY, kRagZ, /*completionFrom*/ 0,
-                             /*orderOverride*/ 11, kSlotRagnaros));
+                             /*orderOverride*/ order++, kSlotRagnaros));
 
     t.push_back(std::move(p));
 }

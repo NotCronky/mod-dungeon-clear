@@ -102,7 +102,9 @@ public:
     std::vector<DcThreatEntry const*> PackMembers(uint32 packId) const;
 
     // The patrolling boss, not yet in combat, that its loop brings within
-    // `radius` of the point soonest, if one does within `horizonSec`.
+    // `radius` of the point soonest, if one does within `horizonSec`. A boss
+    // whose loop never leaves a `horizonSec` gap outside that radius is left
+    // out: there is no time to wait for.
     std::optional<DcPatrolArrival> NextPatrollingBoss(float x, float y, float z, float radius,
                                                        float horizonSec) const;
 
