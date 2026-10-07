@@ -715,10 +715,21 @@ bool DcTargeting::PatrolBossTagWindowOpen(Player* bot, AiObjectContext* ctx, Cre
                                  boss->GetPositionZ(), clearance, BossSpawnIndex::PatrolThreatHeightBand,
                                  boss->GetGUID())
         : nullptr;
-    bool const open = near && !blocker;
-
     DcApproachState& appr = ctx->GetValue<DcApproachState&>(DcKey::ApproachState)->Get();
     uint32 const now = getMSTime();
+
+    // Only reached with nothing left to pre-clear (FindPullTarget asks for a
+    // pre-clear target first). A blocker that never goes (out of reach, a mob
+    // the pre-clear can't take) must not hold the run forever: after
+    // PatrolBossTagMaxWaitSec the tag goes ahead on range alone.
+    if (!appr.patrolTagWaitSince)
+        appr.patrolTagWaitSince = now ? now : 1;
+    bool const waitedOut = getMSTimeDiff(appr.patrolTagWaitSince, now) >=
+        static_cast<uint32>(DcSettings::GetFloat(bot, "PatrolBossTagMaxWaitSec") * 1000.0f);
+    bool const open = near && (!blocker || waitedOut);
+    if (open)
+        appr.patrolTagWaitSince = 0;
+
     if (!open && getMSTimeDiff(appr.lastPatrolTagDiagMs, now) >= 5000)
     {
         appr.lastPatrolTagDiagMs = now;
@@ -735,6 +746,71 @@ bool DcTargeting::PatrolBossTagWindowOpen(Player* bot, AiObjectContext* ctx, Cre
                                              clearance));
     }
     return open;
+}
+Creature* DcTargeting::PatrolBossPreclearTarget(Player* bot, AiObjectContext* ctx, Creature* boss)
+{
+    if (!bot || !ctx || !boss || boss->IsInCombat() || !DcSettings::GetBool(bot, "ThreatMap"))
+        return nullptr;
+    BossPullback const* row = BossPullbackRegistry::Find(bot->GetMapId(), boss->GetEntry());
+    Map* map = bot->GetMap();
+    DcThreatMap const* tm = DcThreatMap::Get(map);
+    DcThreatEntry const* self = tm ? tm->FindByGuid(boss->GetGUID()) : nullptr;
+    if (!row || !self || !self->patrols)
+        return nullptr;
+
+    float const tagRange = DcSettings::GetFloat(bot, "PatrolBossTagRange");
+    float const campR = DcSettings::GetFloat(bot, "PatrolBossCampClearRadius");
+    float const loopR = DcSettings::GetFloat(bot, "PatrolBossPreclearRadius");
+    float const band = BossSpawnIndex::PatrolThreatHeightBand;
+
+    // The stretch of his loop he can be tagged on: every waypoint-path sample
+    // within the tag range of the camp.
+    std::vector<DcThreatMapKernel::PathPoint> zone;
+    std::vector<DcThreatMapKernel::PathPoint> const& path = self->path;
+    for (std::size_t i = 0; i < path.size(); ++i)
+    {
+        DcThreatMapKernel::PathPoint const& a = path[i];
+        DcThreatMapKernel::PathPoint const& b = path[(i + 1) % path.size()];
+        float const len = std::hypot(b.x - a.x, b.y - a.y);
+        for (float d = 0.0f; d <= len; d += DcThreatMapKernel::kPathSampleYd)
+        {
+            float const f = len > 0.0f ? d / len : 0.0f;
+            DcThreatMapKernel::PathPoint const q{a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f,
+                                                 a.z + (b.z - a.z) * f};
+            if (std::hypot(q.x - row->campX, q.y - row->campY) <= tagRange)
+                zone.push_back(q);
+            if (len <= 0.0f)
+                break;
+        }
+    }
+
+    Creature* best = nullptr;
+    float bestD = 0.0f;
+    for (DcThreatEntry const& e : tm->Entries())
+    {
+        if (!e.alive || !e.loaded || e.inCombat || e.evading || e.boss || e.guid.IsEmpty())
+            continue;
+        bool inside = std::hypot(e.x - row->campX, e.y - row->campY) <= campR &&
+                      std::fabs(e.z - row->campZ) <= band;
+        for (std::size_t i = 0; !inside && i < zone.size(); ++i)
+            inside = std::hypot(e.x - zone[i].x, e.y - zone[i].y) <= loopR && std::fabs(e.z - zone[i].z) <= band;
+        if (!inside)
+            continue;
+        Creature* c = map->GetCreature(e.guid);
+        if (!c || !c->IsAlive() || !c->IsHostileTo(bot) || !AttackersValue::IsPossibleTarget(c, bot) ||
+            !DcEngageGeometry::IsLevelReachable(bot, c))
+            continue;
+        // Nearest the camp first: the clear works outward from where the raid stands.
+        float const d = std::hypot(e.x - row->campX, e.y - row->campY);
+        if (!best || d < bestD)
+        {
+            best = c;
+            bestD = d;
+        }
+    }
+    if (best)
+        ctx->GetValue<DcApproachState&>(DcKey::ApproachState)->Get().patrolTagWaitSince = 0;
+    return best;
 }
 Unit* DcTargeting::FindPullTarget(PlayerbotAI* botAI, DungeonBossInfo const& next)
 {
@@ -775,9 +851,17 @@ Unit* DcTargeting::FindPullTarget(PlayerbotAI* botAI, DungeonBossInfo const& nex
         (pullCtx.bossPullback || DcTickMemoAccess::AtBossEngage(bot, context, next)))
     {
         Creature* const pullbackBoss = GetLiveBoss(bot, context, next.entry);
-        if (pullbackBoss && pullbackBoss->IsAlive() &&
-            (pullCtx.bossPullback || PatrolBossTagWindowOpen(bot, context, pullbackBoss)))
-            return pullbackBoss;
+        if (pullbackBoss && pullbackBoss->IsAlive())
+        {
+            if (pullCtx.bossPullback)
+                return pullbackBoss;
+            // A patrolling one: clear around the camp and his loop first, then tag
+            // him in a quiet window.
+            if (Creature* const pack = PatrolBossPreclearTarget(bot, context, pullbackBoss))
+                return pack;
+            if (PatrolBossTagWindowOpen(bot, context, pullbackBoss))
+                return pullbackBoss;
+        }
         // Not loaded / already dead: fall through. The corridor scan below vetoes
         // bosses anyway, so this degrades to "no pull target", and the at-boss
         // engage's own not-present handling reports it.

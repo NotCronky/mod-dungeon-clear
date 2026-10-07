@@ -1322,11 +1322,20 @@ DungeonClear.PullPatrolBossHoldSec = 240.0
 #        boss stands within PatrolBossTagClearance yards of him, so pulling him
 #        starts no other fight. Needs DungeonClear.ThreatMap.
 #
-#        Default: 60.0 / 35.0
+#        While the tag waits, the tank first clears the packs within
+#        PatrolBossCampClearRadius yards of the spot and within
+#        PatrolBossPreclearRadius yards of the stretch of his patrol it could tag
+#        him on. If something near him still never clears, the tag goes ahead
+#        after PatrolBossTagMaxWaitSec seconds anyway.
+#
+#        Default: 80.0 / 35.0 / 45.0 / 30.0 / 300.0
 #
 
-DungeonClear.PatrolBossTagRange = 60.0
+DungeonClear.PatrolBossTagRange = 80.0
 DungeonClear.PatrolBossTagClearance = 35.0
+DungeonClear.PatrolBossCampClearRadius = 45.0
+DungeonClear.PatrolBossPreclearRadius = 30.0
+DungeonClear.PatrolBossTagMaxWaitSec = 300.0
 
 #
 #    DungeonClear.PullChaseLeash

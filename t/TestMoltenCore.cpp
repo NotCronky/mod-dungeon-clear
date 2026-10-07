@@ -44,6 +44,11 @@ TEST(DcMoltenCoreTest, RosterAppendsTheFinaleInOrder)
     // Lucifron..Baron Geddon keep their derived order...
     for (uint32 i = 0; i < 6; ++i)
         EXPECT_EQ(out[i].encounterIndex, i) << i;
+    // ...Geddon re-anchored at his pull-back camp on the near side of his loop,
+    // on his own kill-bit.
+    EXPECT_EQ(out[5].entry, 12056u);
+    EXPECT_NEAR(out[5].x, 682.0f, 1.0f);
+    EXPECT_NEAR(out[5].y, -714.0f, 1.0f);
 
     // ...then Geddon's rune, which he can die ~240yd away from on his patrol...
     EXPECT_EQ(out[6].kind, DungeonAnchorKind::Objective);

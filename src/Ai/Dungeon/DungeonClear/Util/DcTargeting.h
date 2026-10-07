@@ -276,6 +276,14 @@ public:
     // and once he is in combat. Logs why it is holding, throttled.
     static bool PatrolBossTagWindowOpen(Player* bot, AiObjectContext* ctx, Creature* boss);
 
+    // While a PATROLLING pull-back boss waits for his tag window: the next pack to
+    // clear first — idle, hostile, reachable, within PatrolBossCampClearRadius of
+    // the camp or within PatrolBossPreclearRadius of the stretch of his loop the
+    // tag can happen on — nearest the camp first. Null when there is none (or the
+    // boss does not patrol); the pull pipeline sizes and drags it like any pack,
+    // so the patrol-boss hold times it around his loop.
+    static Creature* PatrolBossPreclearTarget(Player* bot, AiObjectContext* ctx, Creature* boss);
+
     // --- Room-wide-aggro pre-clear (RoomAggroRegistry) --------------------
 
     // True when the next boss is a flagged room-aggro boss AND the tank is at
