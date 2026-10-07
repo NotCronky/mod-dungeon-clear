@@ -117,6 +117,20 @@ bool DungeonClearMcDouseRuneAction::Execute(Event /*event*/)
     return doused;
 }
 
+std::string DcMoltenCore::ForceRagnaros(Map* map, Player* user)
+{
+    InstanceMap* instMap = map ? map->ToInstanceMap() : nullptr;
+    InstanceScript* inst = instMap ? instMap->GetInstanceScript() : nullptr;
+    if (!inst || !user || map->GetId() != MAP_ID)
+        return "not a Molten Core instance";
+
+    // DATA_MAJORDOMO_EXECUTUS. Before the runes: once they are out the script
+    // summons him, at his battle spot unless this slot is already DONE.
+    if (inst->GetBossState(8) != DONE)
+        inst->SetBossState(8, DONE);
+    return ForceMajordomo(map, user);
+}
+
 std::string DcMoltenCore::ForceMajordomo(Map* map, Player* user)
 {
     InstanceMap* instMap = map ? map->ToInstanceMap() : nullptr;
