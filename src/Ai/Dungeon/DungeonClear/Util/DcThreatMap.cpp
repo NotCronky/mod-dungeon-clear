@@ -15,9 +15,9 @@
 #include "MotionMaster.h"
 #include "ObjectMgr.h"
 #include "Timer.h"
+#include "WaypointMgr.h"
 #include "World.h"
 #include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
-#include "DcThreatMapKernel.h"
 
 std::mutex DcThreatMap::_lock;
 std::unordered_map<uint64, std::unique_ptr<DcThreatMap>> DcThreatMap::_maps;
@@ -92,6 +92,20 @@ void DcThreatMap::Build(Map* map)
         e.spawnZ = e.z = data.posZ;
         e.patrols = data.movementType == WAYPOINT_MOTION_TYPE;
         e.boss = bossEntries.count(data.id) != 0;
+        if (e.patrols)
+        {
+            // creature_addon's path_id, or the spawn-id convention (as
+            // BossSpawnIndex::PatrolThreats reads it).
+            uint32 pathId = spawnId * 10;
+            if (CreatureAddon const* addon = sObjectMgr->GetCreatureAddon(spawnId))
+                if (addon->path_id)
+                    pathId = addon->path_id;
+            if (WaypointPath const* path = sWaypointMgr->GetPath(pathId))
+                for (WaypointNode const& node : path->Nodes)
+                    e.path.push_back({node.X, node.Y, node.Z});
+            if (CreatureTemplate const* ct = sObjectMgr->GetCreatureTemplate(data.id))
+                e.walkSpeed = ct->speed_walk * baseMoveSpeed[MOVE_WALK];
+        }
 
         DcThreatMapKernel::SpawnPoint p{data.posX, data.posY, data.posZ, 0u};
         auto const formation = sFormationMgr->CreatureGroupMap.find(spawnId);
@@ -158,6 +172,8 @@ void DcThreatMap::Refresh(Map* map, uint32 nowMs)
         e.alive = live->IsAlive();
         e.inCombat = live->IsInCombat();
         e.evading = live->IsInEvadeMode();
+        if (e.patrols)
+            e.walkSpeed = live->GetSpeed(MOVE_WALK);
     }
 }
 
@@ -203,4 +219,22 @@ std::vector<DcThreatEntry const*> DcThreatMap::PackMembers(uint32 packId) const
         if (e.alive && e.packId == packId)
             out.push_back(&e);
     return out;
+}
+
+std::optional<DcPatrolArrival> DcThreatMap::NextPatrollingBoss(float x, float y, float z, float radius,
+                                                                float horizonSec) const
+{
+    std::optional<DcPatrolArrival> soonest;
+    for (DcThreatEntry const& e : _entries)
+    {
+        if (!e.alive || !e.boss || !e.patrols || e.inCombat || e.path.empty())
+            continue;
+        float const eta = DcThreatMapKernel::PatrolEtaSec(e.path, e.x, e.y, e.z, e.walkSpeed, x, y, z, radius,
+                                                          BossSpawnIndex::PatrolThreatHeightBand, horizonSec);
+        if (eta == DcThreatMapKernel::kNever)
+            continue;
+        if (!soonest || eta < soonest->etaSec)
+            soonest = DcPatrolArrival{&e, eta};
+    }
+    return soonest;
 }

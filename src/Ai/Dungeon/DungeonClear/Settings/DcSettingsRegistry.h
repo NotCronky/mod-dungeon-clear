@@ -684,6 +684,12 @@ inline constexpr DcSettingDef kDcSettings[] =
     // was about to be two mobs smaller.
     { "PullPatrolWait",        DcType::Bool,   1,   0,   1,  true  },
     { "PullPatrolWaitSec",     DcType::Float,  8,   1,  30,  true,  18 },
+    // Hold a pull while a patrolling boss's loop brings him within
+    // PullPatrolBossClearance yd of the pack inside PullPatrolBossFightSec; give
+    // up holding after PullPatrolBossHoldSec. Clearance 0 = off.
+    { "PullPatrolBossClearance", DcType::Float, 50,  0, 150,  true  },
+    { "PullPatrolBossFightSec",  DcType::Float, 45,  5, 180,  true  },
+    { "PullPatrolBossHoldSec",   DcType::Float, 240, 10, 600, true  },
 
     // Chase leash. Patrol-wait above handles a patroller that CONTENDS a pack we
     // are pulling; this handles the patroller that IS the pack. A pull target is
