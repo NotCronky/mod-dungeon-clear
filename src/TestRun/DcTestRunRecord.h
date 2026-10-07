@@ -46,17 +46,17 @@ namespace DcTestRunRecord
         std::uint32_t fromMap = 0;
         float fromX = 0.f, fromY = 0.f, fromZ = 0.f, fromO = 0.f;
         // What the member did with its spells while the party cleared (see
-        // DcRotationCensus): per spell, casts and CheckCast rejections with the
-        // most frequent SpellCastResult; and the class abilities it knows but
+        // DcRotationCensus): per spell, casts and failed casts with the most
+        // frequent SpellCastResult; and the class abilities it knows but
         // never cast. Filled at teardown, while the member is still in world.
         struct RotationSpell
         {
             std::uint32_t spellId = 0;
             std::string name;
             std::uint32_t casts = 0;
-            std::uint32_t rejected = 0;
-            std::uint32_t topReject = 0;
-            std::uint32_t topRejectCount = 0;
+            std::uint32_t failed = 0;
+            std::uint32_t topFail = 0;
+            std::uint32_t topFailCount = 0;
         };
         std::vector<RotationSpell> rotation;
         std::vector<std::string> unusedSpells;
@@ -159,7 +159,7 @@ namespace DcTestRunRecord
         //     running event filled — DcRunState::SetTestExtra). On a scenario
         //     run bossesTotal / bossRoster count the FOCUS only, so do not
         //     compare them with a full-dungeon run of the same map.
-        // 14: added comp[].rotation (per-spell casts / CheckCast rejections) and
+        // 14: added comp[].rotation (per-spell casts / failed casts) and
         //     comp[].unusedSpells (known class abilities never cast) — the
         //     rotation census, collected from the Monitoring stage to teardown.
         std::uint32_t schema = 14;

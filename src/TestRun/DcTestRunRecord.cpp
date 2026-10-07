@@ -147,8 +147,8 @@ namespace DcTestRunRecord
                     s << ',';
                 s << "{\"spellId\":" << r.spellId << ",\"name\":";
                 AppendEscaped(s, r.name);
-                s << ",\"casts\":" << r.casts << ",\"rejected\":" << r.rejected
-                  << ",\"topReject\":" << r.topReject << ",\"topRejectCount\":" << r.topRejectCount << "}";
+                s << ",\"casts\":" << r.casts << ",\"failed\":" << r.failed
+                  << ",\"topFail\":" << r.topFail << ",\"topFailCount\":" << r.topFailCount << "}";
             }
             s << "],\"unusedSpells\":[";
             for (std::size_t j = 0; j < c.unusedSpells.size(); ++j)

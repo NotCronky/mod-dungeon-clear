@@ -13,18 +13,22 @@
 
 #include "AllSpellScript.h"
 #include "DBCStores.h"
+#include "Opcodes.h"
 #include "Player.h"
+#include "ServerScript.h"
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "WorldPacket.h"
+#include "WorldSession.h"
 
 namespace
 {
     struct Counts
     {
         std::uint32_t casts = 0;
-        std::uint32_t rejected = 0;
-        std::map<std::uint32_t, std::uint32_t> rejects; // SpellCastResult -> count
+        std::uint32_t failed = 0;
+        std::map<std::uint32_t, std::uint32_t> fails; // SpellCastResult -> count
     };
 
     // Map threads update different instances at the same time, so every touch
@@ -55,7 +59,7 @@ namespace
     {
     public:
         DcRotationCensusScript()
-            : AllSpellScript("DcRotationCensusScript", { ALLSPELLHOOK_ON_CAST, ALLSPELLHOOK_ON_SPELL_CHECK_CAST }) { }
+            : AllSpellScript("DcRotationCensusScript", { ALLSPELLHOOK_ON_CAST }) { }
 
         void OnSpellCast(Spell* spell, Unit* /*caster*/, SpellInfo const* spellInfo, bool /*skipCheck*/) override
         {
@@ -69,13 +73,27 @@ namespace
                 ++tally->second[FirstRank(spellInfo->Id)].casts;
         }
 
-        void OnSpellCheckCast(Spell* spell, bool /*strict*/, SpellCastResult& res) override
+    };
+
+    // Failed casts, from the SMSG_CAST_FAILED the server sends the bot's
+    // (socketless) session: uint8 cast count, uint32 spell id, uint8 result.
+    class DcRotationCensusPacketScript : public ServerScript
+    {
+    public:
+        DcRotationCensusPacketScript() : ServerScript("DcRotationCensusPacketScript", { SERVERHOOK_ON_PACKET_SENT }) { }
+
+        void OnPacketSent(WorldSession* session, WorldPacket const& packet) override
         {
-            if (res == SPELL_CAST_OK)
+            if (packet.GetOpcode() != SMSG_CAST_FAILED || packet.size() < 6 || !session)
                 return;
 
-            Player* player = TrackedCaster(spell);
+            Player* player = session->GetPlayer();
             if (!player)
+                return;
+
+            std::uint32_t spellId = packet.read<std::uint32_t>(1);
+            std::uint8_t result = packet.read<std::uint8_t>(5);
+            if (!player->HasSpell(spellId))
                 return;
 
             std::lock_guard<std::mutex> guard(sLock);
@@ -83,9 +101,9 @@ namespace
             if (tally == sTallies.end())
                 return;
 
-            Counts& counts = tally->second[FirstRank(spell->GetSpellInfo()->Id)];
-            ++counts.rejected;
-            ++counts.rejects[static_cast<std::uint32_t>(res)];
+            Counts& counts = tally->second[FirstRank(spellId)];
+            ++counts.failed;
+            ++counts.fails[result];
         }
     };
 }
@@ -124,13 +142,13 @@ void DcRotationCensus::Collect(Player* player, std::vector<SpellLine>& lines, st
         line.spellId = spellId;
         line.name = info ? info->SpellName[0] : "";
         line.casts = counts.casts;
-        line.rejected = counts.rejected;
-        for (auto const& [reason, count] : counts.rejects)
+        line.failed = counts.failed;
+        for (auto const& [reason, count] : counts.fails)
         {
-            if (count > line.topRejectCount)
+            if (count > line.topFailCount)
             {
-                line.topReject = reason;
-                line.topRejectCount = count;
+                line.topFail = reason;
+                line.topFailCount = count;
             }
         }
         lines.push_back(std::move(line));
@@ -138,7 +156,7 @@ void DcRotationCensus::Collect(Player* player, std::vector<SpellLine>& lines, st
 
     std::sort(lines.begin(), lines.end(), [](SpellLine const& a, SpellLine const& b)
     {
-        return a.casts != b.casts ? a.casts > b.casts : a.rejected > b.rejected;
+        return a.casts != b.casts ? a.casts > b.casts : a.failed > b.failed;
     });
 
     // Known class abilities never cast: active, of the class's spell family, and
@@ -172,4 +190,5 @@ void DcRotationCensus::Collect(Player* player, std::vector<SpellLine>& lines, st
 void AddSC_dungeon_clear_rotation_census()
 {
     new DcRotationCensusScript();
+    new DcRotationCensusPacketScript();
 }

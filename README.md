@@ -182,10 +182,10 @@ total=0` runs a whole pool of dungeons until stopped — the Test Deck's
 Continuous mode, which keeps every failure and its logs across restarts.
 
 Each run also records a **rotation census** per party member: every spell it
-cast and how often, how often the server's cast check refused a spell and why
-(the bot AI asks before it casts, so a spell refused hundreds of times with few
-casts is a rotation reaching for something it can't use), and the class
-abilities it knew but never cast. `python3 tools/dc_rotation_report.py` sums it
+cast and how often, which casts the server refused and why (a spell that keeps
+failing for the same reason is a rotation reaching for something it can't use:
+wrong stance or form, out of range, no reagent), and the class abilities it
+knew but never cast. `python3 tools/dc_rotation_report.py` sums it
 per class and spec over the runs (`--last N`, `--class rogue`, `--per-run`, or a
 run id prefix).
 
