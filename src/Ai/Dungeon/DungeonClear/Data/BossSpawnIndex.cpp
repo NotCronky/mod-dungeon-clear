@@ -12,6 +12,8 @@
 #include "CreatureSpawnEntry.h"
 #include "DBCStores.h"
 #include "DBCStructure.h"
+#include "G3D/Vector2.h"
+#include "G3D/Vector3.h"
 #include "MotionMaster.h"
 #include "ObjectMgr.h"
 #include "WaypointMgr.h"
@@ -23,17 +25,19 @@ std::unordered_map<uint64, std::vector<uint32>> BossSpawnIndex::_patrolThreats;
 
 namespace
 {
-    // 2D distance from (px,py) to the segment a-b.
-    float SegmentDistance(float px, float py, float ax, float ay, float bx, float by)
+    // Does the segment a-b pass within `radius` of p across the map, at about
+    // p's height? Height counts: Baron Geddon's ledge is ~49yd from Golemagg
+    // across the map but ~29yd above his lava cave, and never meets that fight.
+    bool PassesNear(G3D::Vector3 const& p, G3D::Vector3 const& a, G3D::Vector3 const& b, float radius,
+                    float heightBand)
     {
-        float const dx = bx - ax;
-        float const dy = by - ay;
-        float const len2 = dx * dx + dy * dy;
-        float t = len2 > 0.0f ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0.0f;
-        t = std::clamp(t, 0.0f, 1.0f);
-        float const cx = ax + t * dx - px;
-        float const cy = ay + t * dy - py;
-        return std::sqrt(cx * cx + cy * cy);
+        G3D::Vector2 const d(b.x - a.x, b.y - a.y);
+        float const len2 = d.squaredLength();
+        float const t = len2 > 0.0f
+            ? std::clamp((G3D::Vector2(p.x - a.x, p.y - a.y)).dot(d) / len2, 0.0f, 1.0f) : 0.0f;
+        G3D::Vector3 const closest = a + (b - a) * t;
+        return G3D::Vector2(closest.x - p.x, closest.y - p.y).length() <= radius &&
+               std::fabs(closest.z - p.z) <= heightBand;
     }
 }
 
@@ -80,7 +84,9 @@ std::vector<uint32> BossSpawnIndex::PatrolThreats(uint32 mapId, uint32 bossEntry
             {
                 WaypointNode const& a = nodes[i];
                 WaypointNode const& b = nodes[(i + 1) % nodes.size()];
-                crosses = SegmentDistance(target->x, target->y, a.X, a.Y, b.X, b.Y) <= PatrolThreatRadius;
+                crosses = PassesNear(G3D::Vector3(target->x, target->y, target->z),
+                                     G3D::Vector3(a.X, a.Y, a.Z), G3D::Vector3(b.X, b.Y, b.Z),
+                                     PatrolThreatRadius, PatrolThreatHeightBand);
             }
             if (crosses && std::find(threats.begin(), threats.end(), data.id) == threats.end())
                 threats.push_back(data.id);
