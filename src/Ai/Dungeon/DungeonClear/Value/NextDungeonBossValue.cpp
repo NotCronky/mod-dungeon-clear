@@ -285,9 +285,17 @@ std::optional<DungeonBossInfo> NextDungeonBossValue::Calculate()
     bool const stickyReleased = stickyEntry &&
         std::none_of(cands.begin(), cands.end(),
                      [stickyEntry](DungeonBossInfo const& c) { return c.entry == stickyEntry; });
-    if (stickyReleased)
+    //
+    // Only BACK: a boss earlier in the order than the patroller, which is what a
+    // redirect skips. Shazzrah patrols too, and when he died this picked the
+    // first anchor near his loop, his own Rune of Mazj objective (key 11);
+    // PickTarget then advanced past it straight to Majordomo, with Sulfuron and
+    // Golemagg alive and Majordomo unsummoned (tr-20261007-234806-1).
+    if (stickyReleased && haveStickyIndex)
         for (DungeonBossInfo const& c : cands)
         {
+            if (c.kind != DungeonAnchorKind::Boss || BossOrderKey(c) >= stickyEncounterIndex)
+                continue;
             std::vector<uint32> const threats = BossSpawnIndex::PatrolThreats(map->GetId(), c.entry, bosses);
             if (std::find(threats.begin(), threats.end(), stickyEntry) != threats.end())
             {
