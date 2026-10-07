@@ -20,13 +20,15 @@ public:
     static std::vector<DungeonBossInfo> const& Get(uint32 mapId, Difficulty difficulty);
 
     // The bosses of `roster` whose waypoint patrol passes within
-    // PatrolThreatRadius of `bossEntry`'s spot: alive, they walk into that
-    // boss's fight, so the clear kills them first (Molten Core's Baron Geddon
-    // patrols through Shazzrah's room). From spawn and waypoint data; cached
+    // PatrolThreatRadius of `bossEntry`'s spot, within PatrolThreatHeightBand of
+    // its height: alive, they walk into that boss's fight, so the clear kills
+    // them first (Molten Core's Baron Geddon patrols through Shazzrah's room,
+    // but his ledge above Golemagg's lava cave does not count). From spawn and waypoint data; cached
     // per (map, boss). Empty for a boss nothing patrols past.
     static std::vector<uint32> PatrolThreats(uint32 mapId, uint32 bossEntry,
                                              std::vector<DungeonBossInfo> const& roster);
     static constexpr float PatrolThreatRadius = 60.0f;
+    static constexpr float PatrolThreatHeightBand = 15.0f;
 
 private:
     static void EnsureBuilt();
