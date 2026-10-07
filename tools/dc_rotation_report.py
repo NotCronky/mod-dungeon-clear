@@ -7,10 +7,10 @@
     dc_rotation_report.py --class rogue        one class
     dc_rotation_report.py --per-run            one block per party member instead of per class/spec
 
-Per class and spec, summed over the runs: each spell's casts and its share of the casts, how often the
-server's cast check said no and the most common reason (the bot AI asks before it casts, so rejections
-are mostly its own probes: hundreds of them with few casts means a rotation that keeps reaching for a
-spell it can't use), and the class abilities the bots knew but never cast.
+Per class and spec, summed over the runs: each spell's casts and its share of the casts, how many casts the
+server refused and the most common reason (a spell that keeps failing for the same reason is a rotation
+reaching for something it can't use: wrong stance or form, out of range, no reagent), and the class
+abilities the bots knew but never cast.
 
 The records are dc_testruns.jsonl in the worldserver's working directory: env/dist/realms/<realm>/ on
 the progressive realms (--realm), or any directory with --data-dir / $DC_DATA_DIR.
@@ -76,19 +76,19 @@ def load_runs(path, prefix, last):
     return runs[-last:] if last else runs
 
 
-def print_block(title, runs, casts, rejected, reasons, unused, members, names):
+def print_block(title, runs, casts, failed, reasons, unused, members, names):
     total = sum(casts.values())
     print(f"\n== {title}  ({members} member{'s' if members != 1 else ''} over {runs} run{'s' if runs != 1 else ''}, "
           f"{total} casts)")
-    if not casts and not rejected:
+    if not casts and not failed:
         print("   no spells cast or tried")
-    rows = sorted(set(casts) | set(rejected), key=lambda s: (-casts[s], -rejected[s], s))
+    rows = sorted(set(casts) | set(failed), key=lambda s: (-casts[s], -failed[s], s))
     for spell in rows:
         share = f"{100.0 * casts[spell] / total:5.1f}%" if total else "    -"
         line = f"   {casts[spell]:6d} {share}  {spell}"
-        if rejected[spell]:
+        if failed[spell]:
             reason, count = reasons[spell].most_common(1)[0]
-            line += f"   (rejected {rejected[spell]}x, mostly {names.get(reason, reason)} {count}x)"
+            line += f"   (failed {failed[spell]}x, mostly {names.get(reason, reason)} {count}x)"
         print(line)
     never = sorted(s for s, n in unused.items() if n == members)
     sometimes = sorted(s for s, n in unused.items() if n < members)
@@ -115,7 +115,7 @@ def main():
     names = cast_result_names()
     print(f"{len(runs)} run(s) from {path}")
 
-    groups = defaultdict(lambda: {"runs": set(), "members": 0, "casts": Counter(), "rejected": Counter(),
+    groups = defaultdict(lambda: {"runs": set(), "members": 0, "casts": Counter(), "failed": Counter(),
                                   "reasons": defaultdict(Counter), "unused": Counter()})
     for rec in runs:
         for member in rec.get("comp", []):
@@ -131,15 +131,15 @@ def main():
             g["members"] += 1
             for spell in member.get("rotation", []):
                 g["casts"][spell["name"]] += spell["casts"]
-                g["rejected"][spell["name"]] += spell["rejected"]
-                if spell["rejected"]:
-                    g["reasons"][spell["name"]][spell["topReject"]] += spell["topRejectCount"]
+                g["failed"][spell["name"]] += spell.get("failed", 0)
+                if spell.get("failed"):
+                    g["reasons"][spell["name"]][spell["topFail"]] += spell["topFailCount"]
             for spell in member.get("unusedSpells", []):
                 g["unused"][spell] += 1
 
     for key in sorted(groups):
         g = groups[key]
-        print_block(key, len(g["runs"]), g["casts"], g["rejected"], g["reasons"], g["unused"], g["members"], names)
+        print_block(key, len(g["runs"]), g["casts"], g["failed"], g["reasons"], g["unused"], g["members"], names)
 
 
 if __name__ == "__main__":

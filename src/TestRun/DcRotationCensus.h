@@ -19,13 +19,13 @@ class Player;
 //
 // Two counts per spell, keyed by the first rank of its chain (every rank of
 // Frostbolt is one line):
-//   casts     - Spell::cast went through (the spell left the bot's hands).
-//   rejected  - Spell::CheckCast said no. The bot AI asks CheckCast before it
-//               casts (can I cast this now?), so these are mostly the AI's own
-//               probes, not failed casts. A spell rejected hundreds of times for
-//               the same reason with few casts is a rotation that keeps wanting
-//               something it can't have: the wrong stance or form, a missing
-//               reagent, a spell that needs a talent.
+//   casts   - Spell::cast went through (the spell left the bot's hands).
+//   failed  - the bot started a cast and the server refused it, with the
+//             SMSG_CAST_FAILED reason (the packet a client would have shown as
+//             an error). The bot AI's own "can I cast this?" checks send
+//             nothing and are not counted. A spell that fails again and again
+//             for the same reason is a rotation reaching for something it
+//             can't use: the wrong stance or form, out of range, no reagent.
 // Only spells in the bot's spellbook count: procs, item spells and triggered
 // spells are not part of a rotation.
 //
@@ -38,9 +38,9 @@ namespace DcRotationCensus
         std::uint32_t spellId = 0;      // first rank of the chain
         std::string name;
         std::uint32_t casts = 0;
-        std::uint32_t rejected = 0;
-        std::uint32_t topReject = 0;    // SpellCastResult rejected with most often
-        std::uint32_t topRejectCount = 0;
+        std::uint32_t failed = 0;
+        std::uint32_t topFail = 0;      // SpellCastResult it failed with most often
+        std::uint32_t topFailCount = 0;
     };
 
     void Start(ObjectGuid guid);

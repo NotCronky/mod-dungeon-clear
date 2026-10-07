@@ -2402,8 +2402,8 @@ void DcTestRunJob::Teardown()
             DcRotationCensus::Collect(member, lines, entry.unusedSpells);
             entry.rotation.clear();
             for (DcRotationCensus::SpellLine const& line : lines)
-                entry.rotation.push_back({ line.spellId, line.name, line.casts, line.rejected, line.topReject,
-                                           line.topRejectCount });
+                entry.rotation.push_back({ line.spellId, line.name, line.casts, line.failed, line.topFail,
+                                           line.topFailCount });
         }
         _record.stallAtEnd = _record.diag.stallReason;
         _record.phaseAtEnd = _record.diag.phase;
