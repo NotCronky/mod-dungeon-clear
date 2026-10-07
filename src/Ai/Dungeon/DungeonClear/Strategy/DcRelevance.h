@@ -81,6 +81,12 @@ namespace DcRel
     inline constexpr float HakkarFlame      = 35.5f; // ST Hakkar: douse (tie-broken above Pull)
     inline constexpr float Pull             = 35.0f; // advanced/dynamic pull-to-camp maneuver
     inline constexpr float HakkarLootBlood  = 34.0f; // ST Hakkar: grab blood (below flame)
+    // Molten Core: the leader douses a killed boss's Firelord rune before it
+    // drives on. Above the rest of the leader ladder it shares a tick with
+    // (RezParty, EventDue, AtBoss, trash, Advance) so the raid does not walk
+    // away from a rune it would have to come back for; below Pull (35) so a
+    // pull already being set up finishes first. Map-partitioned from Hakkar.
+    inline constexpr float McDouseRune      = 33.0f; // MC: douse a killed boss's rune
     // Post-combat rez driver. Runs on ALL bots (the elected rezzer may be a
     // follower OR the leader — a prot paladin raising its healer), so it must
     // outrank BOTH ladders it can land on: on the leader, EventDue (31) and

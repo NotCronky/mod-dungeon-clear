@@ -1032,3 +1032,7 @@ AC_ADD_CONFIG_FILE("${CMAKE_CURRENT_LIST_DIR}/conf/mod_dungeon_clear.conf.dist")
 #    City as a second Explicit wing layout. The probe routes the Upper City legs
 #    from the portal and checks none crosses the Ring of Law arena floor, which
 #    is why map 230 needs no wing-tagged nav fence.)
+# New files added: Action/DcMoltenCoreRunes.cpp
+#   (Molten Core Firelord runes: the DC leader douses each killed boss's rune by
+#    using it, which mod-individual-progression's ManualRuneHandling requires
+#    before Majordomo Executus is summoned.)

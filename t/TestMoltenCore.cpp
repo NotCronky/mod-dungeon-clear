@@ -10,8 +10,9 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcDifficulty.h"
 
 // Molten Core (map 409) — raid-support Plan E1 data. The eight statics derive
-// from BossSpawnIndex at runtime; these tests pin the authored finale: the two
-// script-summoned bosses and the Ragnaros summon event.
+// from BossSpawnIndex at runtime; these tests pin the authored additions: Baron
+// Geddon's rune objective, the two script-summoned bosses and the Ragnaros
+// summon event.
 
 namespace
 {
@@ -38,28 +39,39 @@ TEST(DcMoltenCoreTest, RosterAppendsTheFinaleInOrder)
 {
     auto const out =
         BossRosterRegistry::Apply(kMap, DcDiffKey::Raid(0), Statics());
-    ASSERT_EQ(out.size(), 11u);
+    ASSERT_EQ(out.size(), 12u);
 
-    // The eight statics keep their derived order...
-    for (uint32 i = 0; i < 8; ++i)
+    // Lucifron..Baron Geddon keep their derived order...
+    for (uint32 i = 0; i < 6; ++i)
         EXPECT_EQ(out[i].encounterIndex, i) << i;
 
+    // ...then Geddon's rune, which he can die ~240yd away from on his patrol...
+    EXPECT_EQ(out[6].kind, DungeonAnchorKind::Objective);
+    EXPECT_EQ(out[6].name, "Douse Rune of Zeth");
+    EXPECT_GT(BossOrderKey(out[6]), BossOrderKey(out[5]));
+
+    // ...then Sulfuron and Golemagg, reordered past it on their own kill-bits...
+    EXPECT_EQ(out[7].entry, 12098u);
+    EXPECT_EQ(out[7].encounterIndex, 6u);
+    EXPECT_EQ(out[8].entry, 11988u);
+    EXPECT_EQ(out[8].encounterIndex, 7u);
+
     // ...then Majordomo, the summon objective, and Ragnaros.
-    EXPECT_EQ(out[8].entry, 12018u);
-    EXPECT_EQ(out[8].kind, DungeonAnchorKind::Boss);
-    EXPECT_EQ(out[8].doneBossStateIndex, 8);
+    EXPECT_EQ(out[9].entry, 12018u);
+    EXPECT_EQ(out[9].kind, DungeonAnchorKind::Boss);
+    EXPECT_EQ(out[9].doneBossStateIndex, 8);
     // Boss-state completion parks the encounterIndex out of mask range so no
     // static boss's bit can ever be misread as theirs.
-    EXPECT_GE(out[8].encounterIndex, 32u);
+    EXPECT_GE(out[9].encounterIndex, 32u);
 
-    EXPECT_EQ(out[9].kind, DungeonAnchorKind::Objective);
-    EXPECT_EQ(out[9].eventId, 1u);
-    EXPECT_EQ(out[9].gateEntry, 11502u);  // a live Ragnaros satisfies it
+    EXPECT_EQ(out[10].kind, DungeonAnchorKind::Objective);
+    EXPECT_EQ(out[10].eventId, 1u);
+    EXPECT_EQ(out[10].gateEntry, 11502u);  // a live Ragnaros satisfies it
 
-    EXPECT_EQ(out[10].entry, 11502u);
-    EXPECT_EQ(out[10].kind, DungeonAnchorKind::Boss);
-    EXPECT_EQ(out[10].doneBossStateIndex, 9);
-    EXPECT_GE(out[10].encounterIndex, 32u);
+    EXPECT_EQ(out[11].entry, 11502u);
+    EXPECT_EQ(out[11].kind, DungeonAnchorKind::Boss);
+    EXPECT_EQ(out[11].doneBossStateIndex, 9);
+    EXPECT_GE(out[11].encounterIndex, 32u);
 }
 
 TEST(DcMoltenCoreTest, SummonRagnarosEventShape)

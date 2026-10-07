@@ -29,7 +29,8 @@ TEST(DungeonClearRelevanceTest, NonCombatLadderStrictlyDescends)
     EXPECT_GT(DcRel::HakkarSuppressor, DcRel::HakkarFlame);
     EXPECT_GT(DcRel::HakkarFlame,     DcRel::Pull);        // tie-broken (was ==)
     EXPECT_GT(DcRel::Pull,            DcRel::HakkarLootBlood);
-    EXPECT_GT(DcRel::HakkarLootBlood, DcRel::RezParty);
+    EXPECT_GT(DcRel::HakkarLootBlood, DcRel::McDouseRune);
+    EXPECT_GT(DcRel::McDouseRune,     DcRel::RezParty);
     EXPECT_GT(DcRel::RezParty,        DcRel::EventDue);
     EXPECT_GT(DcRel::EventDue,        DcRel::AtBoss);
     EXPECT_GT(DcRel::AtBoss,          DcRel::AssistCamp);

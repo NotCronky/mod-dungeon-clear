@@ -423,6 +423,19 @@ public:
     bool Execute(Event event) override;
 };
 
+// MOLTEN CORE RUNES: the leader walks to a killed boss's Firelord rune and USES
+// it — the rune's script douses it, standing in for the Aqual Quintessence the
+// bots don't carry. All seven doused -> Majordomo Executus is summoned.
+class DungeonClearMcDouseRuneAction : public DcMovementAction
+{
+public:
+    DungeonClearMcDouseRuneAction(PlayerbotAI* botAI)
+        : DcMovementAction(botAI, "dungeon clear mc douse rune")
+    {
+    }
+    bool Execute(Event event) override;
+};
+
 // LOOT: take Hakkari Blood (10460) from a freshly-killed Bloodkeeper (8438)
 // corpse, driving the loot DIRECTLY (fill + StoreLootItem) so it lands mid-wave
 // — the normal DC loot pipeline only runs out of combat and may quality-filter a

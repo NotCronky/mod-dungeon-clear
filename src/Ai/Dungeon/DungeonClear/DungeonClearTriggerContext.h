@@ -57,6 +57,7 @@ public:
         creators["dungeon clear hakkar suppressor"] = &DungeonClearTriggerContext::hakkar_suppressor;
         creators["dungeon clear hakkar flame"] = &DungeonClearTriggerContext::hakkar_flame;
         creators["dungeon clear hakkar loot blood"] = &DungeonClearTriggerContext::hakkar_loot_blood;
+        creators["dungeon clear mc douse rune"] = &DungeonClearTriggerContext::mc_douse_rune;
         creators["dungeon clear loot roll pending"] = &DungeonClearTriggerContext::loot_roll_pending;
 
         // Chat-command triggers (one per keyword/alias).
@@ -116,6 +117,7 @@ private:
     static Trigger* hakkar_suppressor(PlayerbotAI* ai) { return new DungeonClearHakkarSuppressorTrigger(ai); }
     static Trigger* hakkar_flame(PlayerbotAI* ai) { return new DungeonClearHakkarFlameTrigger(ai); }
     static Trigger* hakkar_loot_blood(PlayerbotAI* ai) { return new DungeonClearHakkarLootBloodTrigger(ai); }
+    static Trigger* mc_douse_rune(PlayerbotAI* ai) { return new DungeonClearMcDouseRuneTrigger(ai); }
     static Trigger* loot_roll_pending(PlayerbotAI* ai) { return new DungeonClearLootRollPendingTrigger(ai); }
 
     static Trigger* dc_on(PlayerbotAI* ai) { return new ChatCommandTrigger(ai, "dc on"); }

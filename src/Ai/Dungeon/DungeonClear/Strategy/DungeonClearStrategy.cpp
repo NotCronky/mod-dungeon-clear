@@ -98,6 +98,13 @@ void DungeonClearStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "dungeon clear hakkar loot blood",
         { NextAction("dungeon clear hakkar loot blood", DcRel::HakkarLootBlood) }));
 
+    // Molten Core Firelord runes: the leader douses a killed boss's rune before
+    // driving on, so Majordomo Executus can spawn. Inert off map 409 and for a
+    // rune that is not waiting (see DcMoltenCoreRunes.cpp).
+    triggers.push_back(new TriggerNode(
+        "dungeon clear mc douse rune",
+        { NextAction("dungeon clear mc douse rune", DcRel::McDouseRune) }));
+
     // Arrived at a travel OBJECTIVE (BossRosterRegistry, non-combat anchor).
     // Peer of at-boss (30) — mutually exclusive via the anchor-kind check in
     // each trigger — so the objective is completed and the clear advances

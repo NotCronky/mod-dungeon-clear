@@ -273,6 +273,24 @@ std::optional<DungeonBossInfo> NextDungeonBossValue::Calculate()
     std::optional<DungeonBossInfo> pick =
         DcBossOrdering::PickTarget(cands, stickyEntry, stickyEncounterIndex, haveStickyIndex);
 
+    // The commit just released on a patrol threat (below) that was redirected to
+    // ahead of the boss it blocks: go back to that boss. PickTarget alone would
+    // advance past the threat's own, later key and leave the blocked boss behind
+    // until the wrap-around (Geddon's key 5 would skip Shazzrah's 4).
+    bool const stickyReleased = stickyEntry &&
+        std::none_of(cands.begin(), cands.end(),
+                     [stickyEntry](DungeonBossInfo const& c) { return c.entry == stickyEntry; });
+    if (stickyReleased)
+        for (DungeonBossInfo const& c : cands)
+        {
+            std::vector<uint32> const threats = BossSpawnIndex::PatrolThreats(map->GetId(), c.entry, bosses);
+            if (std::find(threats.begin(), threats.end(), stickyEntry) != threats.end())
+            {
+                pick = c;
+                break;
+            }
+        }
+
     // PATROL THREATS. A boss on a waypoint patrol through the picked boss's room
     // walks into that fight (Molten Core's Baron Geddon patrols through
     // Shazzrah's — tr-20261007-051506-2 wiped to him there), so while it is
