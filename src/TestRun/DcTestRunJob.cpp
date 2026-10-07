@@ -51,6 +51,7 @@
 #include "Util/DcPoolBots.h"
 #include "Util/DcProvisionBudget.h"
 #include "Ai/Dungeon/DungeonClear/Action/DcActionShared.h"
+#include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonWingRegistry.h"
 #include "Ai/Dungeon/DungeonClear/DcPullContext.h"
@@ -1428,6 +1429,20 @@ void DcTestRunJob::TickStarting()
                     return;
                 }
             }
+            // A boss on a patrol through a focus boss's room walks into its fight,
+            // so it is part of the run and dies first, as the clear itself does
+            // (NextDungeonBossValue). Molten Core: boss=shazzrah also kills
+            // Baron Geddon, whose patrol runs through Shazzrah's room.
+            std::vector<uint32> withThreats;
+            for (uint32 const entry : _focus)
+            {
+                for (uint32 const threat : BossSpawnIndex::PatrolThreats(_mapId, entry, bosses))
+                    if (std::find(withThreats.begin(), withThreats.end(), threat) == withThreats.end())
+                        withThreats.push_back(threat);
+                if (std::find(withThreats.begin(), withThreats.end(), entry) == withThreats.end())
+                    withThreats.push_back(entry);
+            }
+            _focus = std::move(withThreats);
             _bossFocused = true;
             _record.focus = _focus;
         }
@@ -1640,14 +1655,25 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
     uint32 missing = 0;
     uint32 kept = 0;
     std::vector<Creature*> trash;
+    // Every boss of the run (the target and the patrollers that die first).
+    std::vector<Position> focusSpots;
+    for (DungeonBossInfo const& b : bosses)
+        if (std::find(_focus.begin(), _focus.end(), b.entry) != _focus.end())
+            focusSpots.emplace_back(b.x, b.y, b.z);
     if (_bossClearTrash)
     {
         for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
         {
+            if (data.mapid != _mapId || !(data.spawnMask & (1 << map->GetSpawnMode())))
+                continue;
             float const radius =
                 data.movementType == WAYPOINT_MOTION_TYPE ? kBossPatrolTrashRadius : kBossTrashRadius;
-            if (data.mapid != _mapId || !(data.spawnMask & (1 << map->GetSpawnMode())) ||
-                focusPos.GetExactDist(data.posX, data.posY, data.posZ) > radius)
+            Position const* nearest = nullptr;
+            for (Position const& spot : focusSpots)
+                if (!nearest || spot.GetExactDist(data.posX, data.posY, data.posZ) <
+                                    nearest->GetExactDist(data.posX, data.posY, data.posZ))
+                    nearest = &spot;
+            if (!nearest || nearest->GetExactDist(data.posX, data.posY, data.posZ) > radius)
                 continue;
             ++spawnsNear;
             map->LoadGrid(data.posX, data.posY);
@@ -1662,7 +1688,7 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
                 Creature* c = it->second;
                 if (!c || !c->IsInWorld() || !c->IsAlive())
                     continue;
-                if (KeepForBossRun(c, tank, bossEntries, focusPos))
+                if (KeepForBossRun(c, tank, bossEntries, *nearest))
                     ++kept;
                 else
                     trash.push_back(c);
@@ -1674,32 +1700,6 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
     // still fire. Self-kills, so nobody gets loot or credit for them.
     for (Creature* c : trash)
         c->KillSelf(false);
-
-    // The OTHER bosses are skipped, not gone: one on a patrol walks into the
-    // fight (Molten Core's Baron Geddon patrols through Shazzrah's room —
-    // tr-20261007-051506-2 wiped to him there). Send each patrolling one home
-    // and hold it there for the run.
-    std::string parked;
-    for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
-    {
-        if (data.mapid != _mapId || data.movementType != WAYPOINT_MOTION_TYPE || data.id == focus->entry ||
-            !bossEntries.count(data.id))
-            continue;
-        map->LoadGrid(data.posX, data.posY);
-        auto const bounds = map->GetCreatureBySpawnIdStore().equal_range(spawnId);
-        for (auto it = bounds.first; it != bounds.second; ++it)
-        {
-            Creature* other = it->second;
-            if (!other || !other->IsInWorld() || !other->IsAlive() || other->IsInCombat())
-                continue;
-            other->SetDefaultMovementType(IDLE_MOTION_TYPE);
-            other->GetMotionMaster()->Clear();
-            other->NearTeleportTo(data.posX, data.posY, data.posZ, data.orientation);
-            other->SetHomePosition(data.posX, data.posY, data.posZ, data.orientation);
-            other->GetMotionMaster()->MoveIdle();
-            parked += (parked.empty() ? "" : ", ") + other->GetName();
-        }
-    }
 
     // The start point: the navmesh route from the party to the boss (the way
     // the clear itself paths), walked back from the boss's end to the spot
@@ -1792,10 +1792,10 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
     }
 
     LOG_INFO("playerbots.dungeonclear",
-             "TESTRUN {} boss start: {} ({}) — {} spawns within {:.0f}yd ({:.0f}yd for patrols): killed {}, kept {}, "
-             "not loaded {}; patrolling bosses held at home: {}; {}",
-             _record.runId, focus->name, focus->entry, spawnsNear, kBossTrashRadius, kBossPatrolTrashRadius,
-             trash.size(), kept, missing, parked.empty() ? std::string("none") : parked,
+             "TESTRUN {} boss start: {} ({}) of {} focus — {} spawns within {:.0f}yd ({:.0f}yd for patrols): "
+             "killed {}, kept {}, not loaded {}; {}",
+             _record.runId, focus->name, focus->entry, _focus.size(), spawnsNear, kBossTrashRadius,
+             kBossPatrolTrashRadius, trash.size(), kept, missing,
              placed ? Acore::StringFormat("party moved to {:.1f},{:.1f},{:.1f} ({:.0f}yd off)",
                                           _bossStartPos.GetPositionX(), _bossStartPos.GetPositionY(),
                                           _bossStartPos.GetPositionZ(), _bossStartPos.GetExactDist(&focusPos))
