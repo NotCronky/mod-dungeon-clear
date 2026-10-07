@@ -1566,6 +1566,8 @@ namespace
     constexpr float kBossStartDistance = 60.0f;
     constexpr float kBossStartMaxDistance = 90.0f;
     constexpr float kBossTrashRadius = 120.0f;
+    // Patrolling trash walks in from farther out: cleared to this radius.
+    constexpr float kBossPatrolTrashRadius = 200.0f;
     constexpr float kBossKeepRadius = 15.0f;
     constexpr uint32 kBossStartSettleMs = 15000;
 
@@ -1642,8 +1644,10 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
     {
         for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
         {
+            float const radius =
+                data.movementType == WAYPOINT_MOTION_TYPE ? kBossPatrolTrashRadius : kBossTrashRadius;
             if (data.mapid != _mapId || !(data.spawnMask & (1 << map->GetSpawnMode())) ||
-                focusPos.GetExactDist(data.posX, data.posY, data.posZ) > kBossTrashRadius)
+                focusPos.GetExactDist(data.posX, data.posY, data.posZ) > radius)
                 continue;
             ++spawnsNear;
             map->LoadGrid(data.posX, data.posY);
@@ -1670,6 +1674,32 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
     // still fire. Self-kills, so nobody gets loot or credit for them.
     for (Creature* c : trash)
         c->KillSelf(false);
+
+    // The OTHER bosses are skipped, not gone: one on a patrol walks into the
+    // fight (Molten Core's Baron Geddon patrols through Shazzrah's room —
+    // tr-20261007-051506-2 wiped to him there). Send each patrolling one home
+    // and hold it there for the run.
+    std::string parked;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+    {
+        if (data.mapid != _mapId || data.movementType != WAYPOINT_MOTION_TYPE || data.id == focus->entry ||
+            !bossEntries.count(data.id))
+            continue;
+        map->LoadGrid(data.posX, data.posY);
+        auto const bounds = map->GetCreatureBySpawnIdStore().equal_range(spawnId);
+        for (auto it = bounds.first; it != bounds.second; ++it)
+        {
+            Creature* other = it->second;
+            if (!other || !other->IsInWorld() || !other->IsAlive() || other->IsInCombat())
+                continue;
+            other->SetDefaultMovementType(IDLE_MOTION_TYPE);
+            other->GetMotionMaster()->Clear();
+            other->NearTeleportTo(data.posX, data.posY, data.posZ, data.orientation);
+            other->SetHomePosition(data.posX, data.posY, data.posZ, data.orientation);
+            other->GetMotionMaster()->MoveIdle();
+            parked += (parked.empty() ? "" : ", ") + other->GetName();
+        }
+    }
 
     // The start point: the navmesh route from the party to the boss (the way
     // the clear itself paths), walked back from the boss's end to the spot
@@ -1762,8 +1792,10 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
     }
 
     LOG_INFO("playerbots.dungeonclear",
-             "TESTRUN {} boss start: {} ({}) — {} spawns within {:.0f}yd: killed {}, kept {}, not loaded {}; {}",
-             _record.runId, focus->name, focus->entry, spawnsNear, kBossTrashRadius, trash.size(), kept, missing,
+             "TESTRUN {} boss start: {} ({}) — {} spawns within {:.0f}yd ({:.0f}yd for patrols): killed {}, kept {}, "
+             "not loaded {}; patrolling bosses held at home: {}; {}",
+             _record.runId, focus->name, focus->entry, spawnsNear, kBossTrashRadius, kBossPatrolTrashRadius,
+             trash.size(), kept, missing, parked.empty() ? std::string("none") : parked,
              placed ? Acore::StringFormat("party moved to {:.1f},{:.1f},{:.1f} ({:.0f}yd off)",
                                           _bossStartPos.GetPositionX(), _bossStartPos.GetPositionY(),
                                           _bossStartPos.GetPositionZ(), _bossStartPos.GetExactDist(&focusPos))
