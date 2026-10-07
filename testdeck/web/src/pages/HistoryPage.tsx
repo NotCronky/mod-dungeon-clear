@@ -527,6 +527,13 @@ export function RunDetail({ r }: { r: RunRecord }) {
               {d.opponent
                 ? `${d.onBoss ? "" : "trash: "}${d.opponent}`
                 : "out of combat"}
+              {d.killedBy && (
+                <span className="text-ink-600">
+                  {" "}· killed by {d.killedBy}
+                  {d.killedBySpellName ? `'s ${d.killedBySpellName}` : d.killedBy !== "environment" ? " (melee)" : ""}
+                  {d.killingBlow ? ` for ${d.killingBlow.toLocaleString()}` : ""}
+                </span>
+              )}
             </Line>
           ))}
         </Section>

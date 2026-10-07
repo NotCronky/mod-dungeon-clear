@@ -114,6 +114,13 @@ namespace
         // door and the ramp holds him and the reflections and no other spawn, so
         // there is nothing in it an advanced pull would legitimately want to drag.
         { 668, 5388.92f, 5438.92f, 2091.50f, 2141.50f },
+        // Molten Core — Majordomo Executus's battle spot (759.5, -1173.4). His
+        // Separation Anxiety gives any of his eight Flamewaker adds +200% damage
+        // once it is more than 40yd from him, and he never leaves his spot, so a
+        // pull-to-camp turns the add fight into a wipe. The adds summon at
+        // x 738-767, y -1199..-1149; the box is that with ~20yd of margin, and no
+        // other creature spawns inside it.
+        { 409, 718.0f, 788.0f, -1220.0f, -1130.0f },
     };
 }
 

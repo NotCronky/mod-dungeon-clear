@@ -1932,6 +1932,15 @@ void DcTestRunJob::TrackDeaths(Player* tank)
         death.opponent = _engaged.name;
         death.opponentEntry = _engaged.entry;
         death.onBoss = _engaged.isBoss;
+        DcRotationCensus::LastHit hit;
+        if (DcRotationCensus::LastHitOn(member->GetGUID(), hit))
+        {
+            death.killedBy = hit.attacker;
+            death.killedByEntry = hit.entry;
+            death.killedBySpell = hit.spellId;
+            death.killedBySpellName = hit.spell;
+            death.killingBlow = hit.damage;
+        }
         _record.deaths.push_back(death);
         // Deliberately overwritten even when the latch is empty: this means
         // "what the LAST death was to", not "the last death that had a killer".

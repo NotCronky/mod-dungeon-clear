@@ -48,6 +48,17 @@ namespace
     };
     std::unordered_map<ObjectGuid, MeterTally> sMeters;
 
+    // The spell a hit on a tracked member is about to land with: the core asks
+    // the spell / periodic / melee damage hooks first, then deals the damage
+    // (OnDamage). Keyed by victim, matched on the attacker.
+    struct PendingHit
+    {
+        ObjectGuid attacker;
+        std::uint32_t spellId = 0;
+    };
+    std::unordered_map<ObjectGuid, PendingHit> sPending;
+    std::unordered_map<ObjectGuid, DcRotationCensus::LastHit> sLastHits;
+
     // How many members are tracked: the damage and heal hooks fire for every
     // hit on the server, and with no test run going they return on this
     // without touching the lock.
@@ -119,10 +130,30 @@ namespace
     {
     public:
         DcRotationCensusMeterScript()
-            : UnitScript("DcRotationCensusMeterScript", true, { UNITHOOK_ON_DAMAGE, UNITHOOK_ON_HEAL }) { }
+            : UnitScript("DcRotationCensusMeterScript", true,
+                         { UNITHOOK_ON_DAMAGE, UNITHOOK_ON_HEAL, UNITHOOK_MODIFY_SPELL_DAMAGE_TAKEN,
+                           UNITHOOK_MODIFY_PERIODIC_DAMAGE_AURAS_TICK, UNITHOOK_MODIFY_MELEE_DAMAGE }) { }
+
+        void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& /*damage*/, SpellInfo const* spellInfo) override
+        {
+            NoteSpell(target, attacker, spellInfo ? spellInfo->Id : 0);
+        }
+
+        void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& /*damage*/,
+                                           SpellInfo const* spellInfo) override
+        {
+            NoteSpell(target, attacker, spellInfo ? spellInfo->Id : 0);
+        }
+
+        void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& /*damage*/) override
+        {
+            NoteSpell(target, attacker, 0);
+        }
 
         void OnDamage(Unit* attacker, Unit* victim, uint32& damage) override
         {
+            NoteHit(attacker, victim, damage);
+
             // Damage into enemies only: not Life Tap, Hellfire's self-burn or a mind-controlled party member.
             if (!attacker || !victim || !damage || attacker == victim || !attacker->IsHostileTo(victim))
                 return;
@@ -134,6 +165,42 @@ namespace
         {
             if (gain)
                 AddToMeter(healer, 0, gain);
+        }
+
+    private:
+        static void NoteSpell(Unit* target, Unit* attacker, std::uint32_t spellId)
+        {
+            if (!sTracked.load(std::memory_order_relaxed) || !target || !attacker || !target->IsPlayer())
+                return;
+            std::lock_guard<std::mutex> guard(sLock);
+            if (sMeters.count(target->GetGUID()))
+                sPending[target->GetGUID()] = PendingHit{ attacker->GetGUID(), spellId };
+        }
+
+        static void NoteHit(Unit* attacker, Unit* victim, std::uint32_t damage)
+        {
+            if (!sTracked.load(std::memory_order_relaxed) || !victim || !damage || !victim->IsPlayer())
+                return;
+            std::lock_guard<std::mutex> guard(sLock);
+            if (!sMeters.count(victim->GetGUID()))
+                return;
+
+            std::uint32_t spellId = 0;
+            auto pending = sPending.find(victim->GetGUID());
+            if (pending != sPending.end())
+            {
+                if (attacker && pending->second.attacker == attacker->GetGUID())
+                    spellId = pending->second.spellId;
+                sPending.erase(pending);
+            }
+
+            DcRotationCensus::LastHit& hit = sLastHits[victim->GetGUID()];
+            hit.attacker = !attacker || attacker == victim ? "environment" : attacker->GetName();
+            hit.entry = attacker && attacker->IsCreature() ? attacker->GetEntry() : 0;
+            hit.spellId = spellId;
+            SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+            hit.spell = info ? info->SpellName[0] : "";
+            hit.damage = damage;
         }
     };
 
@@ -175,6 +242,8 @@ void DcRotationCensus::Start(ObjectGuid guid)
     std::lock_guard<std::mutex> guard(sLock);
     sTallies[guid].clear();
     sMeters[guid] = MeterTally{};
+    sPending.erase(guid);
+    sLastHits.erase(guid);
     sTracked.store(static_cast<std::uint32_t>(sMeters.size()), std::memory_order_relaxed);
 }
 
@@ -183,6 +252,8 @@ void DcRotationCensus::Stop(ObjectGuid guid)
     std::lock_guard<std::mutex> guard(sLock);
     sTallies.erase(guid);
     sMeters.erase(guid);
+    sPending.erase(guid);
+    sLastHits.erase(guid);
     sTracked.store(static_cast<std::uint32_t>(sMeters.size()), std::memory_order_relaxed);
 }
 
@@ -198,6 +269,16 @@ DcRotationCensus::MeterReading DcRotationCensus::Meter(ObjectGuid guid)
         reading.activeS = meter->second.activeMs / 1000;
     }
     return reading;
+}
+
+bool DcRotationCensus::LastHitOn(ObjectGuid guid, LastHit& hit)
+{
+    std::lock_guard<std::mutex> guard(sLock);
+    auto it = sLastHits.find(guid);
+    if (it == sLastHits.end())
+        return false;
+    hit = it->second;
+    return true;
 }
 
 void DcRotationCensus::Collect(Player* player, std::vector<SpellLine>& lines, std::vector<std::string>& unused)

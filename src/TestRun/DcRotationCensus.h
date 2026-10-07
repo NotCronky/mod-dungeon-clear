@@ -63,6 +63,22 @@ namespace DcRotationCensus
 
     MeterReading Meter(ObjectGuid guid);
 
+    // The last damage a tracked member took: who dealt it and with what. Read
+    // as the member's killer when it dies. `entry` is 0 for a player (or the
+    // member itself, which is how the core deals lava and falling damage);
+    // `spellId` is 0 for a melee or ranged swing.
+    struct LastHit
+    {
+        std::string attacker;
+        std::uint32_t entry = 0;
+        std::uint32_t spellId = 0;
+        std::string spell;
+        std::uint32_t damage = 0;
+    };
+
+    // False when the member took no damage while tracked.
+    bool LastHitOn(ObjectGuid guid, LastHit& hit);
+
     // The member's lines, most cast first, and the active class abilities it
     // knows (highest rank) but never cast while tracked.
     void Collect(Player* player, std::vector<SpellLine>& lines, std::vector<std::string>& unused);
