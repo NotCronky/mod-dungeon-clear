@@ -13,12 +13,15 @@
 
 #include "DBCStores.h"
 #include "Log.h"
+#include "ObjectMgr.h"
 #include "PlayerbotAIConfig.h"
 
+#include "Ai/Dungeon/DungeonClear/Action/DcMoltenCoreRunes.h"
 #include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
 #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettings.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcDifficulty.h"
 
 #include "TestRun/DcTestComp.h"
 #include "TestRun/DcTestGearTiers.h"
@@ -454,14 +457,25 @@ namespace DcTestDungeonRegistry
                 }
                 s << "],\"defaultSize\":" << std::min(kRaidDefaultSize, RaidSizeMax(cap));
                 // The bosses `boss=` can scope a run to (the Deck's boss picker),
-                // in the map's roster order.
+                // in the map's clear order: the roster with its patches, less a
+                // script-summoned boss the run cannot bring in (Ragnaros) —
+                // Molten Core's Majordomo stays, his summon is forced.
                 if (!IsScenario(row))
                 {
                     s << ",\"bosses\":[";
                     bool firstBoss = true;
-                    for (DungeonBossInfo const& boss : BossSpawnIndex::Get(row.mapId, Difficulty(0)))
+                    for (DungeonBossInfo const& boss :
+                         BossRosterRegistry::Apply(row.mapId, DcDiffKey::Raid(0),
+                                                   BossSpawnIndex::Get(row.mapId, Difficulty(0))))
                     {
                         if (boss.kind != DungeonAnchorKind::Boss)
+                            continue;
+                        bool const forced = row.mapId == DcMoltenCore::MAP_ID &&
+                                            boss.entry == DcMoltenCore::NPC_MAJORDOMO;
+                        bool const spawned = std::any_of(
+                            sObjectMgr->GetAllCreatureData().begin(), sObjectMgr->GetAllCreatureData().end(),
+                            [&](auto const& kv) { return kv.second.mapid == row.mapId && kv.second.id == boss.entry; });
+                        if (!spawned && !forced)
                             continue;
                         s << (firstBoss ? "" : ",") << "{\"entry\":" << boss.entry << ",\"name\":\""
                           << EscapeJson(boss.name) << "\"}";

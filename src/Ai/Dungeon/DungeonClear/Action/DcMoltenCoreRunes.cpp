@@ -22,12 +22,21 @@
 // and never clears the flag), under the core's own instance script (same), and
 // on an instance reloaded after the kills (the runes load active, flagged).
 
+#include "DcMoltenCoreRunes.h"
 #include "DungeonClearActions.h"
 
+#include <algorithm>
+#include <iterator>
+
+#include "Creature.h"
 #include "GameObject.h"
+#include "InstanceScript.h"
 #include "Log.h"
+#include "Map.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "SharedDefines.h"
+#include "StringFormat.h"
 #include "Ai/Dungeon/DungeonClear/Trigger/DungeonClearTriggers.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcCombatFlag.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.h"
@@ -106,4 +115,48 @@ bool DungeonClearMcDouseRuneAction::Execute(Event /*event*/)
     LOG_INFO("playerbots.dungeonclear", "[dungeon-clear] {} {} Firelord rune {} ({})",
              bot->GetName(), doused ? "doused" : "failed to douse", rune->GetName(), rune->GetEntry());
     return doused;
+}
+
+std::string DcMoltenCore::ForceMajordomo(Map* map, Player* user)
+{
+    InstanceMap* instMap = map ? map->ToInstanceMap() : nullptr;
+    InstanceScript* inst = instMap ? instMap->GetInstanceScript() : nullptr;
+    if (!inst || !user || map->GetId() != MAP_ID)
+        return "not a Molten Core instance";
+
+    // DATA_LUCIFRON..DATA_GOLEMAGG (molten_core.h). SetBossState is a no-op for
+    // a slot already DONE; for any other it runs the script's kill handling,
+    // which is what readies that boss's rune.
+    uint32 forced = 0;
+    for (uint32 slot = 0; slot < 8; ++slot)
+        if (inst->GetBossState(slot) != DONE && inst->SetBossState(slot, DONE))
+            ++forced;
+
+    uint32 doused = 0;
+    uint32 missing = 0;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
+    {
+        if (data.mapid != MAP_ID ||
+            std::find(std::begin(DcMcRunes::RUNES), std::end(DcMcRunes::RUNES), data.id) == std::end(DcMcRunes::RUNES))
+            continue;
+        map->LoadGrid(data.posX, data.posY);
+        auto const bounds = map->GetGameObjectBySpawnIdStore().equal_range(spawnId);
+        if (bounds.first == bounds.second)
+        {
+            ++missing;
+            continue;
+        }
+        GameObject* rune = bounds.first->second;
+        if (!DcMcRunes::AwaitsDouse(rune))
+            continue;
+        rune->Use(user);
+        if (rune->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
+            ++doused;
+    }
+
+    // The instance hands his GUID out under his boss slot (DATA_MAJORDOMO_EXECUTUS).
+    Creature const* majordomo = map->GetCreature(inst->GetGuidData(8));
+    bool const summoned = majordomo && majordomo->IsAlive();
+    return Acore::StringFormat("Majordomo prep: {} boss slots forced, {} runes doused, {} not loaded; Majordomo {}",
+                               forced, doused, missing, summoned ? "summoned" : "NOT summoned");
 }
