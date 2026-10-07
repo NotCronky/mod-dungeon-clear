@@ -1442,6 +1442,12 @@ void DcTestRunJob::TickStarting()
                 for (uint32 const threat : BossSpawnIndex::PatrolThreats(_mapId, entry, bosses))
                     if (std::find(withThreats.begin(), withThreats.end(), threat) == withThreats.end())
                         withThreats.push_back(threat);
+                // An objective that summons the boss (its gate) runs first: Molten
+                // Core's "Summon Ragnaros" gossips Majordomo and waits out the intro.
+                for (DungeonBossInfo const& b : bosses)
+                    if (b.kind == DungeonAnchorKind::Objective && b.gateEntry == entry &&
+                        std::find(withThreats.begin(), withThreats.end(), b.entry) == withThreats.end())
+                        withThreats.push_back(b.entry);
                 if (std::find(withThreats.begin(), withThreats.end(), entry) == withThreats.end())
                     withThreats.push_back(entry);
             }
@@ -1677,8 +1683,13 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
             }
         }
         std::string prep;
-        if (_mapId == DcMoltenCore::MAP_ID && focus->entry == DcMoltenCore::NPC_MAJORDOMO)
-            prep = "; " + DcMoltenCore::ForceMajordomo(map, tank);
+        if (_mapId == DcMoltenCore::MAP_ID)
+        {
+            if (std::find(_focus.begin(), _focus.end(), DcMoltenCore::NPC_RAGNAROS) != _focus.end())
+                prep = "; " + DcMoltenCore::ForceRagnaros(map, tank);
+            else if (focus->entry == DcMoltenCore::NPC_MAJORDOMO)
+                prep = "; " + DcMoltenCore::ForceMajordomo(map, tank);
+        }
         LOG_INFO("playerbots.dungeonclear", "TESTRUN {} boss start: {} has no spawn — killed {} earlier bosses{}",
                  _record.runId, focus->name, killedBosses, prep);
     }

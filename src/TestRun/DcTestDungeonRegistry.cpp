@@ -458,8 +458,8 @@ namespace DcTestDungeonRegistry
                 s << "],\"defaultSize\":" << std::min(kRaidDefaultSize, RaidSizeMax(cap));
                 // The bosses `boss=` can scope a run to (the Deck's boss picker),
                 // in the map's clear order: the roster with its patches, less a
-                // script-summoned boss the run cannot bring in (Ragnaros) —
-                // Molten Core's Majordomo stays, his summon is forced.
+                // script-summoned boss the run cannot bring in. Molten Core's
+                // Majordomo and Ragnaros stay: the run forces their summons.
                 if (!IsScenario(row))
                 {
                     s << ",\"bosses\":[";
@@ -471,7 +471,8 @@ namespace DcTestDungeonRegistry
                         if (boss.kind != DungeonAnchorKind::Boss)
                             continue;
                         bool const forced = row.mapId == DcMoltenCore::MAP_ID &&
-                                            boss.entry == DcMoltenCore::NPC_MAJORDOMO;
+                                            (boss.entry == DcMoltenCore::NPC_MAJORDOMO ||
+                                             boss.entry == DcMoltenCore::NPC_RAGNAROS);
                         bool const spawned = std::any_of(
                             sObjectMgr->GetAllCreatureData().begin(), sObjectMgr->GetAllCreatureData().end(),
                             [&](auto const& kv) { return kv.second.mapid == row.mapId && kv.second.id == boss.entry; });
