@@ -102,6 +102,14 @@ namespace DcTestRunRecord
         std::string opponent;      // what was on the party; "" if out of combat
         std::uint32_t opponentEntry = 0;
         bool onBoss = false;       // opponent is a roster/flagged boss
+        // The hit that killed them (DcRotationCensus::LastHitOn): who dealt it
+        // ("environment" for lava / falling), its creature entry (0 for a
+        // player or the environment) and spell (0 for a swing), and the amount.
+        std::string killedBy;
+        std::uint32_t killedByEntry = 0;
+        std::uint32_t killedBySpell = 0;
+        std::string killedBySpellName;
+        std::uint32_t killingBlow = 0;
     };
 
     // One pull the Dynamic governor took a verdict on, with what the classifier
@@ -171,7 +179,10 @@ namespace DcTestRunRecord
         //     rotation census, collected from the Monitoring stage to teardown.
         // 15: added comp[].damage / healing / activeS — the damage and healing
         //     meter over the same window.
-        std::uint32_t schema = 15;
+        // 16: added deaths[].killedBy / killedByEntry / killedBySpell /
+        //     killedBySpellName / killingBlow — the real killing hit, where
+        //     `opponent` is only what the party was engaged with.
+        std::uint32_t schema = 16;
         std::string runId;
         std::string planId;       // owning `.dc test plan`, "" for ad-hoc runs
         std::string dungeon;      // registry token

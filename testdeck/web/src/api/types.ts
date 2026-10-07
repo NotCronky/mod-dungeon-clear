@@ -235,6 +235,12 @@ export interface DeathEntry {
   opponent?: string;
   opponentEntry?: number;
   onBoss?: boolean;
+  // Schema 16+: the hit that killed them ("environment" for lava / falling).
+  killedBy?: string;
+  killedByEntry?: number;
+  killedBySpell?: number;
+  killedBySpellName?: string;
+  killingBlow?: number;
 }
 
 export interface PullEntry {

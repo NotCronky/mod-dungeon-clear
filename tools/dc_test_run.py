@@ -691,6 +691,17 @@ def render_deaths(rec):
     deaths = rec.get("deaths") or []
     if not deaths:
         return ["  (none)"]
+    # Schema 16+ records the killing hit; older records only know what the
+    # party was engaged with, which is all "killed by" could say then.
+    if any("killedBy" in d for d in deaths):
+        def blow(d):
+            spell = d.get("killedBySpellName") or ("melee" if d.get("killedBy") != "environment" else "")
+            return f"{spell} {d.get('killingBlow', 0)}".strip()
+        rows = [[mmss(d.get("t")), d.get("name", "?"), d.get("killedBy") or "?",
+                 d.get("killedByEntry") or "", blow(d), d.get("opponent", ""),
+                 "ON BOSS" if d.get("onBoss") else ""]
+                for d in deaths]
+        return table(rows, ["at", "who", "killed by", "entry", "hit", "engaged", ""])
     rows = [[mmss(d.get("t")), d.get("name", "?"), d.get("opponent", "?"),
              d.get("opponentEntry", ""), "ON BOSS" if d.get("onBoss") else ""]
             for d in deaths]
