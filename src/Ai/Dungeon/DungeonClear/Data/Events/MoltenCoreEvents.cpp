@@ -83,6 +83,12 @@ namespace
 
     constexpr uint32 kEventSummonRagnaros = 1;
 
+    constexpr uint32 kGeddon = 12056;
+    // Baron Geddon's pull-back camp (BossPullbackRegistry): his anchor in the
+    // clear order, so boss navigation walks the raid here, on the near side of
+    // his loop, instead of across it to his ledge.
+    constexpr float kGeddonCampX = 682.0f, kGeddonCampY = -714.0f, kGeddonCampZ = -209.4f;
+
     constexpr uint32 kSulfuron = 12098;
     constexpr uint32 kGolemagg = 11988;
     // Rune of Zeth (176952), Baron Geddon's.
@@ -171,6 +177,9 @@ void RegisterMoltenCoreRoster(std::vector<BossRosterPatch>& t)
     // the finale follows it.
     p.reorder.push_back({kSulfuron, 7});
     p.reorder.push_back({kGolemagg, 8});
+    p.remove.push_back(kGeddon);
+    p.add.push_back(MakeBoss(kGeddon, kMapId, "Baron Geddon", kGeddonCampX, kGeddonCampY, kGeddonCampZ,
+                             /*completionFrom*/ kGeddon));
     DungeonBossInfo zeth = MakeObjective(OBJ(2), /*encounterIndex*/ 5, kMapId,
                                          "Douse Rune of Zeth", kZethX, kZethY, kZethZ,
                                          /*arriveRadius*/ 5.0f, /*gateEntry*/ 0,

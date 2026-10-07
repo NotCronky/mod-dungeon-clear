@@ -58,15 +58,21 @@ namespace
             // map  entry  anchor x  y  z  forceAggro  summonIfStuck
 
             // Molten Core — Baron Geddon. Not lethal ground: a PATROL. His loop runs
-            // from this ledge down through Shazzrah's room and past the Firewalker
-            // and Flameguard packs, and engaging him wherever he walked dragged
-            // Shazzrah and three packs into one fight (tr-20261007-222010-1). The
-            // party waits on his ledge at his own spawn (the quietest stretch of
-            // the loop, and his roster anchor, so boss navigation already walks
-            // here), and the tank tags him only once the loop brings him back
-            // within reach with no idle pack near him
-            // (DcTargeting::PatrolBossTagWindowOpen), then drags him home.
-            { 409, 12056, 747.5f, -981.7f, -178.4f },
+            // from his ledge down through Shazzrah's room and past the Firewalker,
+            // Flameguard and Lava Elemental packs, and engaging him wherever he
+            // walked dragged Shazzrah and three packs into one fight
+            // (tr-20261007-222010-1). Raids kill him first, from the near side: the
+            // camp is on the way in from Garr, 74yd north of his loop and ~41yd
+            // from the nearest spawn (his ledge, the first try, is on the FAR side,
+            // so the raid walked through his loop to reach it and he joined a
+            // trash fight in Shazzrah's room on the way, tr-20261007-234806-1).
+            // While the tag waits, the tank pre-clears the packs around the camp
+            // and along the north end of his loop
+            // (DcTargeting::PatrolBossPreclearTarget, timed by the patrol-boss
+            // hold); once he walks that stretch with nothing idle near him it tags
+            // him and drags him to the camp (DcTargeting::PatrolBossTagWindowOpen).
+            // His roster anchor is moved here too (MoltenCoreEvents).
+            { 409, 12056, 682.0f, -714.0f, -209.4f },
         };
         return rows;
     }

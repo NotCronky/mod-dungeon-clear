@@ -152,16 +152,19 @@ TEST(DungeonClearBossPullbackTest, GhazanAnchorIsOnTheDropDownDeck)
         << "the boss anchor is no longer at deck height";
 }
 
-// Baron Geddon is pulled back to his own ledge because he PATROLS through other
-// packs; the camp is his spawn, which is also his roster anchor, so boss
-// navigation walks the raid there without a roster patch.
-TEST(DungeonClearBossPullbackTest, BaronGeddonWaitsOnHisLedge)
+// Baron Geddon is pulled back because he PATROLS through other packs. The camp
+// is on the NEAR side of his loop, on the way in from Garr (his ledge, on the far
+// side, made the raid walk through the loop to reach it).
+TEST(DungeonClearBossPullbackTest, BaronGeddonIsPulledToTheNearSideOfHisLoop)
 {
     BossPullback const* g = BossPullbackRegistry::Find(409, 12056);
     ASSERT_NE(g, nullptr);
     EXPECT_TRUE(BossPullbackRegistry::HasRows(409));
-    EXPECT_NEAR(g->campX, 747.5f, 1.0f);
-    EXPECT_NEAR(g->campY, -981.7f, 1.0f);
+    EXPECT_NEAR(g->campX, 682.0f, 1.0f);
+    EXPECT_NEAR(g->campY, -714.0f, 1.0f);
+    // North of the loop's north end (644,-778 / 664,-786): the raid arrives
+    // from Garr (y ~ -500) without crossing it.
+    EXPECT_GT(g->campY, -760.0f);
     EXPECT_FLOAT_EQ(g->forceAggroRange, 0.0f);
     EXPECT_FALSE(g->summonWhenStuckBelow);
     // The other Molten Core bosses are fought where they stand.
