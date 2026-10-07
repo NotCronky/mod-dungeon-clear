@@ -489,19 +489,19 @@ TEST(RoomAggroRegistryTest, KarazhanMoroesCampStaysInTheHall)
 
 // --- Molten Core (409) — Garr's cave ----------------------------------------
 
-TEST(RoomAggroRegistryTest, MoltenCoreGarrClearsThePatrollingHounds)
+TEST(RoomAggroRegistryTest, MoltenCoreGarrClearsTheLavaGiantsAroundHisCave)
 {
     RoomAggroBoss const* g = RoomAggroRegistry::Find(409, 12057);
     ASSERT_NE(g, nullptr);
-    EXPECT_GE(g->radius, 38.4f);  // the far hound's spawn
+    EXPECT_GE(g->radius, 79.0f);  // the farthest Molten Destroyer
     EXPECT_FLOAT_EQ(RoomAggroRegistry::SkirtOverride(409, 12057), 35.0f);
 
-    // Both Ancient Core Hounds are room trash, cleared before Garr.
-    EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*g, 11673, 18.2f, g->pullOutRadius));
-    EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*g, 11673, 38.4f, g->pullOutRadius));
-    // The Firesworn come with Garr, wherever they stand.
+    // The Molten Destroyers and Lava Annihilators east and south are room trash.
+    EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*g, 11659, 56.0f, g->pullOutRadius));
+    EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*g, 11659, 79.0f, g->pullOutRadius));
+    EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*g, 11665, 56.0f, g->pullOutRadius));
+    // The Firesworn and the patrolling hounds come with Garr.
     EXPECT_FALSE(RoomAggroRegistry::IsRoomTrash(*g, 12099, 4.1f, g->pullOutRadius));
-    EXPECT_FALSE(RoomAggroRegistry::IsRoomTrash(*g, 12099, 12.2f, g->pullOutRadius));
-    // The lava giants outside the cave are not his room's.
-    EXPECT_FALSE(RoomAggroRegistry::IsRoomTrash(*g, 11665, 56.0f, g->pullOutRadius));
+    EXPECT_FALSE(RoomAggroRegistry::IsRoomTrash(*g, 11673, 18.2f, g->pullOutRadius));
+    EXPECT_FALSE(RoomAggroRegistry::IsRoomTrash(*g, 11673, 38.4f, g->pullOutRadius));
 }
