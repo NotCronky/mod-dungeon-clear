@@ -1570,8 +1570,8 @@ namespace
     constexpr uint32 kBossStartSettleMs = 15000;
 
     // A creature the `boss=` trash clear leaves standing: a roster boss, an add
-    // linked to one (formation or linked respawn), the focus boss's escort
-    // ring, and anything that is not a hostile, selectable combatant.
+    // in a boss's formation, the focus boss's escort ring, and anything that is
+    // not a hostile, selectable combatant.
     bool KeepForBossRun(Creature* c, Player* tank, std::unordered_set<uint32> const& bossEntries,
                         Position const& focusPos)
     {
@@ -1586,13 +1586,10 @@ namespace
             if (Creature* leader = group->GetLeader())
                 if (leader != c && bossEntries.count(leader->GetEntry()))
                     return true;
-        if (c->GetSpawnId())
-        {
-            ObjectGuid const linked =
-                sObjectMgr->GetLinkedRespawnGuid(ObjectGuid::Create<HighGuid::Unit>(c->GetEntry(), c->GetSpawnId()));
-            if (linked && bossEntries.count(linked.GetEntry()))
-                return true;
-        }
+        // Not linked respawns: those only keep trash dead once its area's boss
+        // is (Molten Core links most packs to the nearest boss), so they say
+        // nothing about being part of the encounter. tr-20261007-050357-1 kept
+        // all 23 spawns around Garr that way and lost two tanks to the trash.
         return false;
     }
 }
