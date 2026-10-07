@@ -125,7 +125,10 @@ namespace DcTestDriver
         //
         // True when the character now exists (its DB write may still be in
         // flight — see _awaitingFlush).
-        bool TryProvision(std::string const& name, std::string* why)
+        // *retry is set when the refusal is only a write still in flight (the new
+        // account not yet readable): the next command tries again instead of
+        // repeating the refusal until a restart.
+        bool TryProvision(std::string const& name, std::string* why, bool* retry)
         {
             std::string const account = ConfAccount();
             if (account.empty())
@@ -165,6 +168,9 @@ namespace DcTestDriver
                 accountId = AccountMgr::GetId(account);
                 if (!accountId)
                 {
+                    // CreateAccount queues its INSERT on the async connection,
+                    // so the row is usually not there yet: try again shortly.
+                    *retry = true;
                     *why = "created the test driver account '" + account +
                            "' but cannot read it back — " + ManualSetup(name);
                     return false;
@@ -278,9 +284,18 @@ namespace DcTestDriver
             _provisionTried = true;
 
             std::string provisionWhy;
-            if (!TryProvision(name, &provisionWhy))
+            bool retry = false;
+            if (!TryProvision(name, &provisionWhy, &retry))
             {
                 LOG_WARN("playerbots.dungeonclear", "TESTDRIVER {}", provisionWhy);
+                if (retry)
+                {
+                    _provisionTried = false;
+                    if (why)
+                        *why = provisionWhy;
+                    return Readiness::Unavailable;
+                }
+
                 _provisionRefusal = provisionWhy;
                 if (why)
                     *why = provisionWhy;
