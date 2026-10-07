@@ -381,6 +381,8 @@ function LaunchDrawer({
   );
   const [ilvl, setIlvl] = useState(0);
   const [quality, setQuality] = useState(0);
+  /* Raid rows: one boss to test, as its entry id; "" = the whole raid. */
+  const [boss, setBoss] = useState("");
   const [totalText, setTotalText] = useState("5");
   const [concurrentText, setConcurrentText] = useState("1");
   const [rosters, setRosters] = useState<SavedRoster[] | null>(null);
@@ -470,7 +472,16 @@ function LaunchDrawer({
       }
 
       const outcome = await startRun(
-        { dungeon: dungeon.token, heroic, level, seed, size, ilvl, quality },
+        {
+          dungeon: dungeon.token,
+          heroic,
+          level,
+          seed,
+          size,
+          ilvl,
+          quality,
+          bosses: mode === "quick" && boss ? [boss] : [],
+        },
         (attempt, of) => {
           setBusy(`driver logging in — retrying (${attempt}/${of})…`);
           setPendingNote(
@@ -688,6 +699,22 @@ function LaunchDrawer({
                     invalid={!sizeOk}
                     placeholder={String(dungeon.defaultSize ?? 10)}
                   />
+                </Field>
+              )}
+              {mode === "quick" && !scenario && (dungeon.bosses?.length ?? 0) > 0 && (
+                <Field label="Boss" hint="other bosses are skipped; trash on the way is cleared">
+                  <select
+                    value={boss}
+                    onChange={(e) => setBoss(e.target.value)}
+                    className={SELECT}
+                  >
+                    <option value="">whole raid</option>
+                    {dungeon.bosses!.map((b) => (
+                      <option key={b.entry} value={String(b.entry)}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
               )}
               <Field label="Bot level" hint="blank = dungeon default">

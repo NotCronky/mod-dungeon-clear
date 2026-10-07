@@ -15,6 +15,7 @@
 #include "Log.h"
 #include "PlayerbotAIConfig.h"
 
+#include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
 #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettings.h"
@@ -452,6 +453,22 @@ namespace DcTestDungeonRegistry
                     firstPreset = false;
                 }
                 s << "],\"defaultSize\":" << std::min(kRaidDefaultSize, RaidSizeMax(cap));
+                // The bosses `boss=` can scope a run to (the Deck's boss picker),
+                // in the map's roster order.
+                if (!IsScenario(row))
+                {
+                    s << ",\"bosses\":[";
+                    bool firstBoss = true;
+                    for (DungeonBossInfo const& boss : BossSpawnIndex::Get(row.mapId, Difficulty(0)))
+                    {
+                        if (boss.kind != DungeonAnchorKind::Boss)
+                            continue;
+                        s << (firstBoss ? "" : ",") << "{\"entry\":" << boss.entry << ",\"name\":\""
+                          << EscapeJson(boss.name) << "\"}";
+                        firstBoss = false;
+                    }
+                    s << ']';
+                }
             }
             s << ",\"gear\":";
             appendLadder(s, row.mapId, row.recommendedLevel);

@@ -21,6 +21,7 @@ export interface RunSpec {
   size: number;     // 0 = classic 5-man comp; 2..40 = raid size (raid rows)
   ilvl: number;     // 0 = server conf, -1 = no cap, >0 = that item level
   quality: number;  // 0 = server conf, else 1..5
+  bosses?: string[];  // scope the run to these bosses (entry ids); empty = whole dungeon
 }
 
 /* "run" = started outright; "plan" = queued as a 1-run plan because the
@@ -42,6 +43,10 @@ export async function startRun(
       return "run";
     }
     if (attempt >= PENDING_RETRIES) {
+      /* Plans do not take boss=: a boss run waiting on the driver would
+       * silently become a whole-raid plan, so ask for a retry instead. */
+      if (spec.bosses?.length)
+        throw new ApiError(503, "the test driver is still logging in — try again in a moment");
       const p = await api.post<CommandReply>("/api/testplans/start", {
         ...spec,
         total: 1,

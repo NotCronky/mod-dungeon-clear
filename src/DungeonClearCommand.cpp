@@ -415,7 +415,7 @@ public:
 
         static constexpr char const* kUsage =
             "Usage: .dc test start <dungeon> [heroic] [size=N|10|25] [level=N] [seed=N] "
-            "[ilvl=N|none] [quality=normal|uncommon|rare|epic|legendary]\n"
+            "[ilvl=N|none] [quality=normal|uncommon|rare|epic|legendary] [boss=Name[,Name...]]\n"
             "   or: .dc test start <dungeon> party=Tank,Heal,Dps1,Dps2,... [heroic]";
 
         std::string token;
@@ -423,6 +423,9 @@ public:
         uint32 level = 0;
         uint32 seed = 0;  // 0 = roll a random comp; seed=N replays a specific one
         uint32 size = 0;  // 0 = classic 5-man; size=N (or bare 10/25) fields a raid comp
+        // boss=Garr,baron_geddon: only these bosses (name substring, '_' for a
+        // space, or entry id); every other boss on the map is skipped.
+        std::vector<std::string> bossFocus;
         DcTestGearTiers::Spec gear;
         bool heroic = false;
         std::istringstream in{std::string(args)};
@@ -455,6 +458,17 @@ public:
             }
             else if (word.rfind("party=", 0) == 0)
                 party = word.substr(6);
+            else if (word.rfind("boss=", 0) == 0)
+            {
+                std::istringstream list{word.substr(5)};
+                std::string name;
+                while (std::getline(list, name, ','))
+                {
+                    std::replace(name.begin(), name.end(), '_', ' ');
+                    if (!name.empty())
+                        bossFocus.push_back(name);
+                }
+            }
             else if (word.rfind("size=", 0) == 0)
                 size = static_cast<uint32>(std::strtoul(word.c_str() + 5, nullptr, 10));
             else if (word == "heroic")
@@ -502,7 +516,7 @@ public:
                 return true;
             }
             DcTestRunManager::Instance().Start(issuer, token, level, seed, heroic, gear, &msg,
-                                               "", nullptr, nullptr, size);
+                                               "", nullptr, nullptr, size, bossFocus);
         }
         handler->SendSysMessage(msg);
         return true;

@@ -163,6 +163,14 @@ class RunStartRequest(BaseModel):
     # -1 = no limit, >0 = that item level. quality is 0 (inherit) or 1..5.
     ilvl: int = 0
     quality: int = 0
+    # Scope the run to these bosses (catalogue "bosses" names or entry ids);
+    # every other boss on the map is skipped. Empty = the whole dungeon.
+    bosses: list[str] = []
+
+
+# A boss name or entry id as it may appear in `boss=`: it ends up inside a
+# server command, so nothing that could separate arguments or commands.
+_BOSS_RE = re.compile(r"^[A-Za-z0-9' -]{1,48}$")
 
 
 @router.post("/api/testruns/start")
@@ -198,6 +206,10 @@ async def api_testruns_start(req: RunStartRequest, request: Request):
         cmd += " ilvl=none" if req.ilvl == -1 else f" ilvl={req.ilvl}"
     if req.quality:
         cmd += f" quality={req.quality}"
+    if req.bosses:
+        if len(req.bosses) > 20 or not all(_BOSS_RE.match(b) for b in req.bosses):
+            raise HTTPException(400, "bosses must be boss names or entry ids")
+        cmd += " boss=" + ",".join(b.strip().replace(" ", "_") for b in req.bosses)
     audit(request, cmd)
     reply = await ctx.bridge.exec(cmd)
     return bridge_mod.public_reply(reply, cmd)

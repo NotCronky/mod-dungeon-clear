@@ -326,3 +326,21 @@ TEST(DcTestRunLiveJsonTest, BotManaIsEmittedAndNonManaClassesReportMinusOne)
     EXPECT_NE(json.find("\"inCombat\":false,\"mp\":-1"), std::string::npos);
     EXPECT_NE(json.find("\"inCombat\":false,\"mp\":0"), std::string::npos);
 }
+
+// ---- per-bot damage / healing meter -------------------------------------------
+// The dashboard's DPS / HPS columns divide dmg and heal by act (active seconds).
+
+TEST(DcTestRunLiveJsonTest, BotMeterIsEmitted)
+{
+    RunSnapshot s = Sample("tr-1", "mc");
+    BotPos mage{"dps", 8, 0.f, 0.f, 0.f, true};
+    mage.hp = 100;
+    mage.damage = 123456;
+    mage.healing = 0;
+    mage.activeS = 300;
+    s.bots.push_back(mage);
+
+    std::string const json = Build(1700000000ull, {s});
+
+    EXPECT_NE(json.find("\"dmg\":123456,\"heal\":0,\"act\":300}"), std::string::npos);
+}

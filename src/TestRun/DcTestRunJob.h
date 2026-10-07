@@ -125,6 +125,12 @@ public:
     ObjectGuid TankGuid() const { return _tankGuid; }
     ObjectGuid GmGuid() const { return _gmGuid; }
     std::string const& RunId() const { return _record.runId; }
+
+    // `boss=` on `.dc test start`: scope the run to these roster bosses (names,
+    // case-insensitive substrings, or entry ids), resolved against the map's
+    // live roster at Starting. Every other boss is skipped and only these count,
+    // exactly as a scenario row's focus does.
+    void SetBossFocus(std::vector<std::string> names) { _bossFocusNames = std::move(names); }
     std::string const& PlanId() const { return _record.planId; }
     std::string const& DungeonToken() const { return _dungeonToken; }
 
@@ -343,6 +349,9 @@ private:
     // Copied off the registry row at InitIdentity so the job never holds a
     // pointer into the catalogue.
     bool _isScenario = false;
+    std::vector<std::string> _bossFocusNames;  // `boss=` as typed
+    bool _bossFocused = false;                 // _focus came from `boss=`
+    bool Focused() const { return _isScenario || _bossFocused; }
     std::vector<uint32> _focus;             // roster entries the run is scoped to
     DcTestDungeonRegistry::SuccessPredicate _success;
     uint32 _successGraceMs = 0;

@@ -60,6 +60,13 @@ namespace DcTestRunRecord
         };
         std::vector<RotationSpell> rotation;
         std::vector<std::string> unusedSpells;
+
+        // Damage / healing meter over the same window (DcRotationCensus::Meter):
+        // damage into hostiles after absorbs, effective healing, and the active
+        // seconds they were dealt in. DPS = damage / activeS.
+        std::uint64_t damage = 0;
+        std::uint64_t healing = 0;
+        std::uint32_t activeS = 0;
     };
 
     struct StatusEntry
@@ -162,7 +169,9 @@ namespace DcTestRunRecord
         // 14: added comp[].rotation (per-spell casts / failed casts) and
         //     comp[].unusedSpells (known class abilities never cast) — the
         //     rotation census, collected from the Monitoring stage to teardown.
-        std::uint32_t schema = 14;
+        // 15: added comp[].damage / healing / activeS — the damage and healing
+        //     meter over the same window.
+        std::uint32_t schema = 15;
         std::string runId;
         std::string planId;       // owning `.dc test plan`, "" for ad-hoc runs
         std::string dungeon;      // registry token

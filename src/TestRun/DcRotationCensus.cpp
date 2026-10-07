@@ -6,6 +6,7 @@
 #include "TestRun/DcRotationCensus.h"
 
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <set>
@@ -17,6 +18,8 @@
 #include "Player.h"
 #include "ServerScript.h"
 #include "Spell.h"
+#include "Timer.h"
+#include "UnitScript.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "WorldPacket.h"
@@ -35,6 +38,43 @@ namespace
     // goes through the lock. The work under it is a map lookup and an increment.
     std::mutex sLock;
     std::unordered_map<ObjectGuid, std::unordered_map<std::uint32_t, Counts>> sTallies;
+
+    struct MeterTally
+    {
+        std::uint64_t damage = 0;
+        std::uint64_t healing = 0;
+        std::uint32_t activeMs = 0;
+        std::uint32_t lastMs = 0;  // getMSTime() of the last event; 0 = none yet
+    };
+    std::unordered_map<ObjectGuid, MeterTally> sMeters;
+
+    // How many members are tracked: the damage and heal hooks fire for every
+    // hit on the server, and with no test run going they return on this
+    // without touching the lock.
+    std::atomic<std::uint32_t> sTracked{0};
+
+    void AddToMeter(Unit* source, std::uint64_t damage, std::uint64_t healing)
+    {
+        if (!sTracked.load(std::memory_order_relaxed) || !source)
+            return;
+
+        Player* player = source->GetCharmerOrOwnerPlayerOrPlayerItself();
+        if (!player)
+            return;
+
+        std::uint32_t const now = getMSTime();
+        std::lock_guard<std::mutex> guard(sLock);
+        auto meter = sMeters.find(player->GetGUID());
+        if (meter == sMeters.end())
+            return;
+
+        MeterTally& m = meter->second;
+        m.damage += damage;
+        m.healing += healing;
+        if (m.lastMs)
+            m.activeMs += std::min(getMSTimeDiff(m.lastMs, now), DcRotationCensus::ActiveGapMs);
+        m.lastMs = now;
+    }
 
     std::uint32_t FirstRank(std::uint32_t spellId)
     {
@@ -75,6 +115,28 @@ namespace
 
     };
 
+    class DcRotationCensusMeterScript : public UnitScript
+    {
+    public:
+        DcRotationCensusMeterScript()
+            : UnitScript("DcRotationCensusMeterScript", true, { UNITHOOK_ON_DAMAGE, UNITHOOK_ON_HEAL }) { }
+
+        void OnDamage(Unit* attacker, Unit* victim, uint32& damage) override
+        {
+            // Damage into enemies only: not Life Tap, Hellfire's self-burn or a mind-controlled party member.
+            if (!attacker || !victim || !damage || attacker == victim || !attacker->IsHostileTo(victim))
+                return;
+
+            AddToMeter(attacker, damage, 0);
+        }
+
+        void OnHeal(Unit* healer, Unit* /*receiver*/, uint32& gain) override
+        {
+            if (gain)
+                AddToMeter(healer, 0, gain);
+        }
+    };
+
     // Failed casts, from the SMSG_CAST_FAILED the server sends the bot's
     // (socketless) session: uint8 cast count, uint32 spell id, uint8 result.
     class DcRotationCensusPacketScript : public ServerScript
@@ -112,12 +174,30 @@ void DcRotationCensus::Start(ObjectGuid guid)
 {
     std::lock_guard<std::mutex> guard(sLock);
     sTallies[guid].clear();
+    sMeters[guid] = MeterTally{};
+    sTracked.store(static_cast<std::uint32_t>(sMeters.size()), std::memory_order_relaxed);
 }
 
 void DcRotationCensus::Stop(ObjectGuid guid)
 {
     std::lock_guard<std::mutex> guard(sLock);
     sTallies.erase(guid);
+    sMeters.erase(guid);
+    sTracked.store(static_cast<std::uint32_t>(sMeters.size()), std::memory_order_relaxed);
+}
+
+DcRotationCensus::MeterReading DcRotationCensus::Meter(ObjectGuid guid)
+{
+    std::lock_guard<std::mutex> guard(sLock);
+    MeterReading reading;
+    auto meter = sMeters.find(guid);
+    if (meter != sMeters.end())
+    {
+        reading.damage = meter->second.damage;
+        reading.healing = meter->second.healing;
+        reading.activeS = meter->second.activeMs / 1000;
+    }
+    return reading;
 }
 
 void DcRotationCensus::Collect(Player* player, std::vector<SpellLine>& lines, std::vector<std::string>& unused)
@@ -191,4 +271,5 @@ void AddSC_dungeon_clear_rotation_census()
 {
     new DcRotationCensusScript();
     new DcRotationCensusPacketScript();
+    new DcRotationCensusMeterScript();
 }

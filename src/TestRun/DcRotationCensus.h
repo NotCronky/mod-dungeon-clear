@@ -43,8 +43,25 @@ namespace DcRotationCensus
         std::uint32_t topFailCount = 0;
     };
 
+    // Damage and healing meter, over the same tracked window. Damage is what
+    // the member (and its pets / totems / guardians) dealt to hostile units
+    // after absorbs; healing is effective healing (overheal left out). Active
+    // time is the meter convention: the gaps between the member's damage and
+    // heal events, each capped at ActiveGapMs, so DPS = damage / activeS is
+    // the rate while it was actually fighting, not over the walks between packs.
+    struct MeterReading
+    {
+        std::uint64_t damage = 0;
+        std::uint64_t healing = 0;
+        std::uint32_t activeS = 0;
+    };
+
+    constexpr std::uint32_t ActiveGapMs = 3000;
+
     void Start(ObjectGuid guid);
     void Stop(ObjectGuid guid);
+
+    MeterReading Meter(ObjectGuid guid);
 
     // The member's lines, most cast first, and the active class abilities it
     // knows (highest rank) but never cast while tracked.

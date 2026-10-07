@@ -9,6 +9,7 @@ import { fmtDuration, timeAgo, usePoll } from "../api/hooks";
 import { describeGear, rerunSpec, startRosterRun, startRun } from "../api/launch";
 import type {
   Catalogue,
+  CompEntry,
   PlanRecord,
   PullEntry,
   RunDiag,
@@ -474,7 +475,7 @@ export function RunDetail({ r }: { r: RunRecord }) {
             >
               <PlayerName name={m.name} comp={r.comp} />
               <span className="ml-1.5 text-xs text-ink-500">
-                {[m.spec, m.level !== undefined ? `lvl ${m.level}` : ""]
+                {[m.spec, m.level !== undefined ? `lvl ${m.level}` : "", meterLabel(m)]
                   .filter(Boolean)
                   .join(", ")}
                 {m.roleMismatch && (
@@ -1040,4 +1041,15 @@ function PlanDetail({
       )}
     </div>
   );
+}
+
+/* "312 DPS" (or HPS for a member who healed more than it damaged) from the
+ * record's meter; "" on a pre-schema-15 record or a member that did neither. */
+function meterLabel(m: CompEntry): string {
+  const act = m.activeS ?? 0;
+  if (!act) return "";
+  const dmg = m.damage ?? 0;
+  const heal = m.healing ?? 0;
+  if (!dmg && !heal) return "";
+  return heal > dmg ? `${Math.round(heal / act)} HPS` : `${Math.round(dmg / act)} DPS`;
 }

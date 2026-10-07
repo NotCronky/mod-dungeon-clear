@@ -583,6 +583,10 @@ DcTestRunLive::RunSnapshot DcTestRunJob::Snapshot() const
         bp.inCombat = p->IsInCombat();
         if (bp.inCombat)
             s.inCombat = true;
+        DcRotationCensus::MeterReading const meter = DcRotationCensus::Meter(slot.guid);
+        bp.damage = meter.damage;
+        bp.healing = meter.healing;
+        bp.activeS = meter.activeS;
         s.bots.push_back(std::move(bp));
     }
 
@@ -1387,19 +1391,56 @@ void DcTestRunJob::TickStarting()
         }
         _record.bossesTotal = static_cast<uint32>(_roster.size());
 
+        // `boss=`: resolve the requested bosses against the live roster, then
+        // scope the run to them below exactly as a scenario's focus.
+        if (!_bossFocusNames.empty())
+        {
+            _focus.clear();
+            for (std::string const& want : _bossFocusNames)
+            {
+                uint32 const wantEntry = static_cast<uint32>(std::strtoul(want.c_str(), nullptr, 10));
+                std::string wantLower = want;
+                std::transform(wantLower.begin(), wantLower.end(), wantLower.begin(), ::tolower);
+                bool found = false;
+                for (BossRef const& ref : _roster)
+                {
+                    std::string nameLower = ref.name;
+                    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+                    if (!ref.isBoss || (wantEntry ? ref.entry != wantEntry
+                                                  : nameLower.find(wantLower) == std::string::npos))
+                        continue;
+                    if (std::find(_focus.begin(), _focus.end(), ref.entry) == _focus.end())
+                        _focus.push_back(ref.entry);
+                    found = true;
+                }
+                if (!found)
+                {
+                    std::string names;
+                    for (BossRef const& ref : _roster)
+                        if (ref.isBoss)
+                            names += (names.empty() ? "" : ", ") + ref.name;
+                    FailSetup("boss=" + want + " matches no boss on this map (" + names + ")");
+                    return;
+                }
+            }
+            _bossFocused = true;
+            _record.focus = _focus;
+        }
+
         // SCENARIO: the run is scoped to its focus. Every focus entry must be
         // on this map's live roster — the registry gtest can only check the
         // row's shape, not the roster BossSpawnIndex derives at runtime — and a
         // focus the roster lacks would otherwise skip EVERYTHING and flash an
         // instant all-cleared. Then the reported roster/total count the focus
         // only, so a scenario's "1/1" means its objective, not 1/11 of the map.
-        if (_isScenario)
+        if (Focused())
         {
             std::vector<uint32> rosterEntries;
             for (BossRef const& ref : _roster)
                 rosterEntries.push_back(ref.entry);
             std::vector<DcTestDungeonRegistry::Row> const& rows = DcTestDungeonRegistry::All();
-            if (DcTestDungeonRegistry::Row const* row = DcTestDungeonRegistry::Find(_dungeonToken, rows))
+            if (DcTestDungeonRegistry::Row const* row =
+                    _isScenario ? DcTestDungeonRegistry::Find(_dungeonToken, rows) : nullptr)
             {
                 std::string const bad =
                     DcTestDungeonRegistry::ValidateScenario(*row, rows, &rosterEntries);
@@ -1466,7 +1507,7 @@ void DcTestRunJob::TickStarting()
     tankAI->DoSpecificAction("dc on", Event("dc", "", FindGm()), true);
     if (DcRun::Of(ctx).enabled)
     {
-        if (_isScenario)
+        if (Focused())
         {
             // Take the run-instance transition NOW, before filling Skipped. It
             // wipes Skipped, and left to itself it fires on the first
@@ -1510,7 +1551,7 @@ void DcTestRunJob::TickStarting()
 
 void DcTestRunJob::ApplyScenarioSkips(Player* tank, AiObjectContext* ctx)
 {
-    if (!_isScenario || !tank || !ctx)
+    if (!Focused() || !tank || !ctx)
         return;
     std::unordered_set<uint32>& skipped =
         ctx->GetValue<std::unordered_set<uint32>&>(DcKey::Skipped)->Get();
@@ -1856,7 +1897,7 @@ void DcTestRunJob::TickMonitoring(uint32 dt)
         // Scenario scope + success. The skip fill is re-asserted every tick (see
         // ApplyScenarioSkips); the predicate is read straight off the instance
         // and latched by the pure grace clock, whose verdict the kernel folds in.
-        if (_isScenario)
+        if (Focused())
         {
             ApplyScenarioSkips(tank, ctx);
             // No predicate = all-cleared is the only success, as on any row.
@@ -2404,6 +2445,10 @@ void DcTestRunJob::Teardown()
             for (DcRotationCensus::SpellLine const& line : lines)
                 entry.rotation.push_back({ line.spellId, line.name, line.casts, line.failed, line.topFail,
                                            line.topFailCount });
+            DcRotationCensus::MeterReading const meter = DcRotationCensus::Meter(ObjectGuid(entry.guid));
+            entry.damage = meter.damage;
+            entry.healing = meter.healing;
+            entry.activeS = meter.activeS;
         }
         _record.stallAtEnd = _record.diag.stallReason;
         _record.phaseAtEnd = _record.diag.phase;
