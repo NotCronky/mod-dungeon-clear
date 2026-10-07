@@ -94,6 +94,7 @@ struct DcApproachState
     Position lastPos;                // previous-tick world pos; (0,0,0) = not yet sampled
     uint32 lastTickLogMs       = 0;  // advance-tick debug-log throttle (getMSTime)
     uint32 lastObjectiveDiagMs = 0;  // at-objective "near but not arrived" diag throttle (getMSTime)
+    uint32 lastPatrolTagDiagMs = 0;  // patrol-boss tag-held diag throttle (getMSTime)
     uint32 lastTargetEntry     = 0;  // committed boss entry the approach is for
     uint32 lootYieldStartMs    = 0;  // loot-yield commit anchor (getMSTime)
 

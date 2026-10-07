@@ -4,7 +4,9 @@
  */
 
 #include "DcTargeting.h"
+#include "Ai/Dungeon/DungeonClear/DcApproachState.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcThreatMap.h"
 
 #include "DungeonClearUtil.h"   // DcEngageGeometry:: cross-unit calls + DC_PULL_* macros
 
@@ -43,6 +45,7 @@
 #include "InstanceScript.h"
 #include "LootObjectStack.h"
 #include "Map.h"
+#include "StringFormat.h"
 #include "ModelIgnoreFlags.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
@@ -57,6 +60,7 @@
 #include "Timer.h"
 #include "World.h"
 #include "Ai/Dungeon/DungeonClear/Data/BossPullbackRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Data/BossSpawnIndex.h"
 #include "Ai/Dungeon/DungeonClear/Data/DcNeverTargetRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/DcTargetExclusionRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h"
@@ -689,6 +693,49 @@ Unit* DcTargeting::FindEnRouteAggroPack(Player* bot, AiObjectContext* ctx,
     }
     return nullptr;
 }
+bool DcTargeting::PatrolBossTagWindowOpen(Player* bot, AiObjectContext* ctx, Creature* boss)
+{
+    if (!bot || !ctx || !boss || boss->IsInCombat() || !DcSettings::GetBool(bot, "ThreatMap"))
+        return true;
+    DcThreatMap const* tm = DcThreatMap::Get(bot->GetMap());
+    DcThreatEntry const* self = tm ? tm->FindByGuid(boss->GetGUID()) : nullptr;
+    if (!self || !self->patrols)
+        return true;  // stands still: tag him the normal way
+
+    BossPullback const* row = BossPullbackRegistry::Find(bot->GetMapId(), boss->GetEntry());
+    float const tagRange = DcSettings::GetFloat(bot, "PatrolBossTagRange");
+    float const clearance = DcSettings::GetFloat(bot, "PatrolBossTagClearance");
+
+    // Close enough to the camp that the tag leg is short and the drag back
+    // crosses ground the raid is standing next to.
+    bool const near = !row || boss->GetExactDist2d(row->campX, row->campY) <= tagRange;
+    // And standing somewhere quiet, so tagging and dragging him starts no other fight.
+    DcThreatEntry const* blocker = near
+        ? tm->NearestIdleHostile(bot->GetMap(), bot, boss->GetPositionX(), boss->GetPositionY(),
+                                 boss->GetPositionZ(), clearance, BossSpawnIndex::PatrolThreatHeightBand,
+                                 boss->GetGUID())
+        : nullptr;
+    bool const open = near && !blocker;
+
+    DcApproachState& appr = ctx->GetValue<DcApproachState&>(DcKey::ApproachState)->Get();
+    uint32 const now = getMSTime();
+    if (!open && getMSTimeDiff(appr.lastPatrolTagDiagMs, now) >= 5000)
+    {
+        appr.lastPatrolTagDiagMs = now;
+        CreatureTemplate const* ct = blocker ? sObjectMgr->GetCreatureTemplate(blocker->entry) : nullptr;
+        LOG_INFO("playerbots.dungeonclear",
+                 "[DC:{}] patrol-boss tag held: {} at ({:.0f},{:.0f}) {} -> waiting at the camp",
+                 bot->GetName(), boss->GetName(), boss->GetPositionX(), boss->GetPositionY(),
+                 !near ? Acore::StringFormat("is {:.0f}yd from the camp (> {:.0f})",
+                                             row ? boss->GetExactDist2d(row->campX, row->campY) : 0.0f, tagRange)
+                       : Acore::StringFormat("has {} ({}) idle {:.0f}yd from him (< {:.0f})",
+                                             ct ? ct->Name : "?", blocker->entry,
+                                             std::hypot(blocker->x - boss->GetPositionX(),
+                                                        blocker->y - boss->GetPositionY()),
+                                             clearance));
+    }
+    return open;
+}
 Unit* DcTargeting::FindPullTarget(PlayerbotAI* botAI, DungeonBossInfo const& next)
 {
     if (!botAI)
@@ -728,7 +775,8 @@ Unit* DcTargeting::FindPullTarget(PlayerbotAI* botAI, DungeonBossInfo const& nex
         (pullCtx.bossPullback || DcTickMemoAccess::AtBossEngage(bot, context, next)))
     {
         Creature* const pullbackBoss = GetLiveBoss(bot, context, next.entry);
-        if (pullbackBoss && pullbackBoss->IsAlive())
+        if (pullbackBoss && pullbackBoss->IsAlive() &&
+            (pullCtx.bossPullback || PatrolBossTagWindowOpen(bot, context, pullbackBoss)))
             return pullbackBoss;
         // Not loaded / already dead: fall through. The corridor scan below vetoes
         // bosses anyway, so this degrades to "no pull target", and the at-boss

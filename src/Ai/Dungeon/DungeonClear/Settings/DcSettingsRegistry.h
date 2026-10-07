@@ -696,6 +696,11 @@ inline constexpr DcSettingDef kDcSettings[] =
     { "PullPatrolBossClearance", DcType::Float, 50,  0, 150,  true  },
     { "PullPatrolBossFightSec",  DcType::Float, 45,  5, 180,  true  },
     { "PullPatrolBossHoldSec",   DcType::Float, 240, 10, 600, true  },
+    // A patrolling pull-back boss (Baron Geddon) is tagged only within
+    // PatrolBossTagRange of the camp, with no idle mob within
+    // PatrolBossTagClearance of him (DcTargeting::PatrolBossTagWindowOpen).
+    { "PatrolBossTagRange",      DcType::Float, 60, 10, 200,  true  },
+    { "PatrolBossTagClearance",  DcType::Float, 35,  0, 100,  true  },
 
     // Chase leash. Patrol-wait above handles a patroller that CONTENDS a pack we
     // are pulling; this handles the patroller that IS the pack. A pull target is
