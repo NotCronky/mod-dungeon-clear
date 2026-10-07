@@ -194,7 +194,11 @@ the Test Deck shows the meter live on each run card.
 `boss=Name[,Name…]` on `.dc test start` scopes a run to those bosses (a name
 substring, `_` for a space, or an entry id): every other boss on the map is
 skipped and only these count, so `.dc test start mc 40 boss=garr` tests one
-raid boss. The Test Deck's launch form offers a boss picker on raid rows.
+raid boss. To keep that quick, the trash within 120yd of the boss is killed at
+start (linked adds and anything within 15yd of the boss stay) and the party is
+moved to a navmesh point about 60yd from it, along the path back toward the
+entrance; `trash=keep` and `start=entrance` turn either off. The Test Deck's
+launch form offers a boss picker on raid rows.
 
 **[Test Runs](https://github.com/jrad7/mod-dungeon-clear/wiki/Test-Runs)** —
 the full command reference, gear and party options, plans, watching, the

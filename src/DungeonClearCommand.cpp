@@ -415,7 +415,8 @@ public:
 
         static constexpr char const* kUsage =
             "Usage: .dc test start <dungeon> [heroic] [size=N|10|25] [level=N] [seed=N] "
-            "[ilvl=N|none] [quality=normal|uncommon|rare|epic|legendary] [boss=Name[,Name...]]\n"
+            "[ilvl=N|none] [quality=normal|uncommon|rare|epic|legendary]\n"
+            "       [boss=Name[,Name...] [trash=keep] [start=entrance]]\n"
             "   or: .dc test start <dungeon> party=Tank,Heal,Dps1,Dps2,... [heroic]";
 
         std::string token;
@@ -426,6 +427,10 @@ public:
         // boss=Garr,baron_geddon: only these bosses (name substring, '_' for a
         // space, or entry id); every other boss on the map is skipped.
         std::vector<std::string> bossFocus;
+        // A boss= run kills the trash around the boss and starts the party a
+        // safe distance from it; trash=keep / start=entrance turn those off.
+        bool bossClearTrash = true;
+        bool bossStartNear = true;
         DcTestGearTiers::Spec gear;
         bool heroic = false;
         std::istringstream in{std::string(args)};
@@ -458,6 +463,10 @@ public:
             }
             else if (word.rfind("party=", 0) == 0)
                 party = word.substr(6);
+            else if (word == "trash=keep")
+                bossClearTrash = false;
+            else if (word == "start=entrance")
+                bossStartNear = false;
             else if (word.rfind("boss=", 0) == 0)
             {
                 std::istringstream list{word.substr(5)};
@@ -516,7 +525,8 @@ public:
                 return true;
             }
             DcTestRunManager::Instance().Start(issuer, token, level, seed, heroic, gear, &msg,
-                                               "", nullptr, nullptr, size, bossFocus);
+                                               "", nullptr, nullptr, size, bossFocus, bossClearTrash,
+                                               bossStartNear);
         }
         handler->SendSysMessage(msg);
         return true;
