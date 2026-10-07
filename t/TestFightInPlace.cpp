@@ -163,3 +163,16 @@ TEST(FightInPlaceTest, TrollgoreBoxOverlapsTharonJaPlatformAndThatIsHarmless)
     EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(600, -251.9f, -733.1f));
     EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(600, -238.1f, -697.8f));
 }
+
+TEST(FightInPlaceTest, MajordomosAddsAreFoughtWhereTheyStand)
+{
+    // Majordomo Executus and his eight summoned Flamewakers' extremes: dragged
+    // past 40yd from him they take +200% damage (Separation Anxiety).
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(409, 759.5f, -1173.4f));
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(409, 738.0f, -1152.0f));
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(409, 767.0f, -1183.0f));
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(409, 746.0f, -1199.0f));
+    // Golemagg's and Sulfuron's rooms stay pullable.
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(409, 793.2f, -998.3f));
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(409, 601.1f, -1179.1f));
+}
