@@ -33,6 +33,7 @@
 #include "PathGenerator.h"
 #include "Player.h"
 #include "StringFormat.h"
+#include "WaypointMgr.h"
 #include "World.h"
 
 #include "AiFactory.h"
@@ -1710,7 +1711,29 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
                 if (!nearest || spot.GetExactDist(data.posX, data.posY, data.posZ) <
                                     nearest->GetExactDist(data.posX, data.posY, data.posZ))
                     nearest = &spot;
-            if (!nearest || nearest->GetExactDist(data.posX, data.posY, data.posZ) > radius)
+            if (!nearest)
+                continue;
+            bool near = nearest->GetExactDist(data.posX, data.posY, data.posZ) <= radius;
+            // A patroller can spawn far off and still walk into the fight: Molten
+            // Core's Lava Surger 56659 spawns 217yd from Majordomo and patrols to
+            // 39yd of him (tr-20261007-153543-1). Its path counts, at the plain
+            // trash radius.
+            if (!near && data.movementType == WAYPOINT_MOTION_TYPE)
+            {
+                uint32 pathId = spawnId * 10;
+                if (CreatureAddon const* addon = sObjectMgr->GetCreatureAddon(spawnId))
+                    if (addon->path_id)
+                        pathId = addon->path_id;
+                if (WaypointPath const* path = sWaypointMgr->GetPath(pathId))
+                    for (WaypointNode const& node : path->Nodes)
+                        for (Position const& spot : focusSpots)
+                            if (spot.GetExactDist(node.X, node.Y, node.Z) <= kBossTrashRadius)
+                            {
+                                near = true;
+                                nearest = &spot;
+                            }
+            }
+            if (!near)
                 continue;
             ++spawnsNear;
             map->LoadGrid(data.posX, data.posY);
@@ -1932,6 +1955,9 @@ void DcTestRunJob::TrackDeaths(Player* tank)
         death.opponent = _engaged.name;
         death.opponentEntry = _engaged.entry;
         death.onBoss = _engaged.isBoss;
+        death.x = member->GetPositionX();
+        death.y = member->GetPositionY();
+        death.z = member->GetPositionZ();
         DcRotationCensus::LastHit hit;
         if (DcRotationCensus::LastHitOn(member->GetGUID(), hit))
         {
