@@ -176,3 +176,15 @@ TEST(FightInPlaceTest, MajordomosAddsAreFoughtWhereTheyStand)
     EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(409, 793.2f, -998.3f));
     EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(409, 601.1f, -1179.1f));
 }
+
+TEST(FightInPlaceTest, GarrsCaveIsFoughtWhereItStands)
+{
+    // Garr, a Firesworn and the two hound patrols' far ends.
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(409, 691.0f, -498.0f));
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(409, 699.0f, -508.0f));
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(409, 728.0f, -544.0f));
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(409, 668.0f, -474.0f));
+    // The Molten Destroyer and Lava Annihilator south of the cave stay pullable.
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(409, 681.0f, -553.0f));
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(409, 702.0f, -554.0f));
+}
