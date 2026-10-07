@@ -1506,11 +1506,19 @@ void DcPullPlanner::MaintainScoutCamp(PlayerbotAI* botAI, AiObjectContext* ctx)
         // camp-fight and sent it off to form the next pull with the last pack still
         // standing. DcCombatFlag::AnyPartyEngagement is the module's one definition
         // of "somebody is actually fighting" and already carries this exact warning.
+        //
+        // A holding phase the tank has walked far away from is not a maneuver in
+        // flight either: the drag ended while the mode was off (a boss approach), so
+        // the FSM never saw it finish. Left standing, the party keeps "returning" to
+        // a camp hundreds of yards back and the next aggro is fought wherever it
+        // bites (tr-20261007-033621-4: a camp set before Lucifron still held at
+        // Garr, 480yd away, when a patrolling Ancient Core Hound pulled him).
+        bool const holding = DcLeaderSignal::IsPullPhaseHolding(static_cast<uint32>(pull.phase));
+        bool const abandoned = holding && pull.HasCamp() &&
+                               bot->GetExactDist(&pull.camp) > 3.0f * DcSettings::GetFloat(bot, "PullMaxDrag");
         if (DungeonClearMath::ShouldReleaseStandingPull(
                 /*effectiveOn*/ false, /*standing*/ pull.phase != DcPullPhase::Idle || pull.HasCamp(),
-                DcCombatFlag::AnyPartyEngagement(bot),
-                DcLeaderSignal::IsPullPhaseHolding(static_cast<uint32>(pull.phase)),
-                pull.bossPullback) &&
+                DcCombatFlag::AnyPartyEngagement(bot), holding && !abandoned, pull.bossPullback) &&
             DcLeaderSignal::IsDungeonClearLeader(bot))
         {
             DC_PULL_INFO("[DC:{}] pull released: mode off with a pull still standing "

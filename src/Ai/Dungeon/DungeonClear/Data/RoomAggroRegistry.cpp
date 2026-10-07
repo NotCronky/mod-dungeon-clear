@@ -284,6 +284,23 @@ namespace
           /*pullOutRadius*/ 12.0f, /*skirtRadius*/ 32.0f,
           /*hasCampBox*/ true, /*campMinX*/ -11013.0f, /*campMaxX*/ -10900.0f,
           /*campMinY*/ -1940.0f, /*campMaxY*/ -1800.0f },
+
+        // Molten Core — Garr. Not a scripted room pull: two Ancient Core Hounds
+        // (11673) patrol his cave, 18 and 38yd off his spawn, and a hound fought
+        // where it bit puts a 40-man raid inside Garr's aggro with his eight
+        // Firesworn. tr-20261007-033621-4 wiped exactly so: a hound aggroed the
+        // tank 21yd from Garr, Garr joined with 37 bots already fighting.
+        //
+        // radius 45 covers both hounds' patrols; the whitelist keeps the Firesworn
+        // (<=12.2yd, they come with Garr) and the Lava Annihilators / Molten
+        // Destroyers outside the cave (55yd+) out of the room set.
+        //
+        // pullOutRadius 12 keeps a hound on the near leg of its patrol clearable
+        // and forces the advanced pull: the tank tags it from outside its aggro
+        // and drags it out of the cave. skirtRadius 35 keeps that camp, the
+        // approach orbit and the boss standoff clear of Garr's aggro.
+        { 409, 12057, 45.0f, { 11673 }, false, 0.0f, 0.0f,
+          /*pullOutRadius*/ 12.0f, /*skirtRadius*/ 35.0f },
     };
 }
 
