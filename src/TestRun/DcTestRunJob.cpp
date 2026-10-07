@@ -60,6 +60,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRunWing.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcTargeting.h"
+#include "Ai/Dungeon/DungeonClear/Util/LongRangePathfinder.h"
 #include "TestRun/DcDiagSnapshot.h"
 #include "TestRun/DcTestComp.h"
 
@@ -1781,6 +1782,32 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
                 placed = pickOnRoute(std::vector<G3D::Vector3>(points.rbegin(), points.rend()), reasonB);
             if (!placed)
                 why += "; " + reasonB;
+        }
+
+        // C: DC's own whole-route builder, the one the clear walks. The core
+        // PathGenerator stops at 74 polys / ~296yd, so neither A nor B reaches
+        // the deep end of a raid from its entrance (Molten Core's Sulfuron came
+        // back as type 10 and 4). Its navmesh tiles stream in with the grids,
+        // so load every grid the map's spawns sit in first.
+        if (!placed)
+        {
+            for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+                if (data.mapid == _mapId && (data.spawnMask & (1 << map->GetSpawnMode())))
+                    map->LoadGrid(data.posX, data.posY);
+            ChunkedPathfinder::Result const route = LongRangePathfinder::Build(
+                tank, focusPos.GetPositionX(), focusPos.GetPositionY(), focusPos.GetPositionZ());
+            std::vector<G3D::Vector3> points;
+            points.emplace_back(tank->GetPositionX(), tank->GetPositionY(), tank->GetPositionZ());
+            for (PathSegment const& seg : route.segments)
+                points.insert(points.end(), seg.polyline.begin(), seg.polyline.end());
+            std::string reasonC;
+            if (!route.reachable || !route.complete || points.size() < 2)
+                reasonC = "no whole route from the party" +
+                          (route.failureReason.empty() ? std::string() : " (" + route.failureReason + ")");
+            else
+                placed = pickOnRoute(std::vector<G3D::Vector3>(points.rbegin(), points.rend()), reasonC);
+            if (!placed)
+                why += "; " + reasonC;
         }
 
         if (placed)
