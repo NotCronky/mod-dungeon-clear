@@ -1564,6 +1564,7 @@ namespace
     // of its surroundings is cleared of trash, and the escort ring kept alive
     // around it (adds that stand with the boss but are not linked to it).
     constexpr float kBossStartDistance = 60.0f;
+    constexpr float kBossStartMaxDistance = 90.0f;
     constexpr float kBossTrashRadius = 120.0f;
     constexpr float kBossKeepRadius = 15.0f;
     constexpr uint32 kBossStartSettleMs = 15000;
@@ -1630,22 +1631,42 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
         return true;
     }
 
-    // The boss's grids are not loaded while the party stands at the entrance:
-    // load them so its creatures (and the navmesh around it) are there.
+    // The trash is found from the SPAWN table, not from what the map has loaded:
+    // the boss's surroundings are hundreds of yards from the party standing at
+    // the entrance. Each candidate's grid is loaded before it is looked up, so
+    // the creature exists to be killed (tr-20261007-044101-1 found nothing by
+    // scanning the loaded creatures and walked in from the entrance).
     Position const focusPos(focus->x, focus->y, focus->z);
-    map->LoadGridsInRange(focusPos, kBossTrashRadius + 30.0f);
-
-    Creature* boss = nullptr;
+    uint32 spawnsNear = 0;
+    uint32 missing = 0;
+    uint32 kept = 0;
     std::vector<Creature*> trash;
-    for (auto const& [spawnId, c] : map->GetCreatureBySpawnIdStore())
+    if (_bossClearTrash)
     {
-        if (!c || !c->IsInWorld() || !c->IsAlive())
-            continue;
-        if (c->GetEntry() == focus->entry && (!boss || c->GetExactDist(&focusPos) < boss->GetExactDist(&focusPos)))
-            boss = c;
-        if (_bossClearTrash && c->GetExactDist(&focusPos) <= kBossTrashRadius &&
-            !KeepForBossRun(c, tank, bossEntries, focusPos))
-            trash.push_back(c);
+        for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+        {
+            if (data.mapid != _mapId || !(data.spawnMask & (1 << map->GetSpawnMode())) ||
+                focusPos.GetExactDist(data.posX, data.posY, data.posZ) > kBossTrashRadius)
+                continue;
+            ++spawnsNear;
+            map->LoadGrid(data.posX, data.posY);
+            auto const bounds = map->GetCreatureBySpawnIdStore().equal_range(spawnId);
+            if (bounds.first == bounds.second)
+            {
+                ++missing;
+                continue;
+            }
+            for (auto it = bounds.first; it != bounds.second; ++it)
+            {
+                Creature* c = it->second;
+                if (!c || !c->IsInWorld() || !c->IsAlive())
+                    continue;
+                if (KeepForBossRun(c, tank, bossEntries, focusPos))
+                    ++kept;
+                else
+                    trash.push_back(c);
+            }
+        }
     }
 
     // Killed, not despawned: death scripts and instance hooks (doors, counters)
@@ -1653,53 +1674,103 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
     for (Creature* c : trash)
         c->KillSelf(false);
 
-    // The start point: walk the navmesh path from the boss toward the entrance
-    // until the party would stand kStartDistance off him in a straight line.
+    // The start point: the navmesh route from the party to the boss (the way
+    // the clear itself paths), walked back from the boss's end to the spot
+    // kBossStartDistance off him in a straight line. Only a route that really
+    // reaches him counts, and the spot must stay within kBossStartMaxDistance:
+    // anything else keeps the entrance rather than drop the raid somewhere odd.
     bool placed = false;
+    std::string why;
     if (_bossStartNear)
     {
-        // From the boss's spot (live, or its spawn) back toward the party.
-        Position const from = boss ? boss->GetPosition() : focusPos;
-        PathGenerator path(tank);
-        path.CalculatePath(from.GetPositionX(), from.GetPositionY(), from.GetPositionZ(), tank->GetPositionX(),
-                           tank->GetPositionY(), tank->GetPositionZ(), false);
-        Movement::PointsArray const& points = path.GetPath();
-        G3D::Vector3 best;
-        float bestDist = 0.0f;
-        for (G3D::Vector3 const& p : points)
+        map->LoadGridsInRange(focusPos, kBossStartMaxDistance);
+
+        // The spot kBossStartDistance off the boss along a walked route given
+        // as points ordered boss-first; false (with `why`) when the route is
+        // not a real walk out to that ring within kBossStartMaxDistance.
+        auto pickOnRoute = [&](std::vector<G3D::Vector3> const& route, std::string& reason) -> bool
         {
-            float const d = focusPos.GetExactDist(p.x, p.y, p.z);
-            if (d > bestDist)
+            for (std::size_t i = 1; i < route.size(); ++i)
             {
-                best = p;
-                bestDist = d;
+                G3D::Vector3 const& near = route[i - 1];
+                G3D::Vector3 const& far = route[i];
+                float const dNear = focusPos.GetExactDist(near.x, near.y, near.z);
+                float const dFar = focusPos.GetExactDist(far.x, far.y, far.z);
+                if (dFar < kBossStartDistance)
+                    continue;
+                float const t = dFar > dNear && dNear < kBossStartDistance
+                    ? (kBossStartDistance - dNear) / (dFar - dNear) : 0.0f;
+                G3D::Vector3 const at = near + (far - near) * t;
+                float const dAt = focusPos.GetExactDist(at.x, at.y, at.z);
+                if (dAt > kBossStartMaxDistance)
+                {
+                    reason = Acore::StringFormat("the route's first point past {:.0f}yd is {:.0f}yd out",
+                                                 kBossStartDistance, dAt);
+                    return false;
+                }
+                float const facing = std::atan2(focusPos.GetPositionY() - at.y, focusPos.GetPositionX() - at.x);
+                _bossStartPos.Relocate(at.x, at.y, at.z + 0.5f, facing);
+                return true;
             }
-            if (d >= kBossStartDistance)
-                break;
-        }
-        // A start no farther out than the boss's own room is no better than
-        // walking in: keep the entrance then.
-        if (bestDist >= kBossStartDistance * 0.5f)
+            reason = "the route never leaves the safe distance";
+            return false;
+        };
+
+        // A: outward from the boss toward the party. A partial path is fine —
+        // only its first stretch matters — but not a straight-line shortcut
+        // (a missing navmesh answers with the two end points).
         {
-            float const facing = std::atan2(focusPos.GetPositionY() - best.y, focusPos.GetPositionX() - best.x);
-            _bossStartPos.Relocate(best.x, best.y, best.z + 0.5f, facing);
+            PathGenerator path(tank);
+            path.CalculatePath(focusPos.GetPositionX(), focusPos.GetPositionY(), focusPos.GetPositionZ(),
+                               tank->GetPositionX(), tank->GetPositionY(), tank->GetPositionZ(), false);
+            Movement::PointsArray const& points = path.GetPath();
+            bool shortcut = (path.GetPathType() & (PATHFIND_NOPATH | PATHFIND_SHORTCUT)) || points.size() < 3;
+            for (std::size_t i = 1; i < points.size() && !shortcut; ++i)
+                if ((points[i] - points[i - 1]).length() > 30.0f)
+                    shortcut = true;
+            if (shortcut)
+                why = Acore::StringFormat("no navmesh route out of the boss's spot (path type {}, {} points)",
+                                          static_cast<uint32>(path.GetPathType()), points.size());
+            else
+                placed = pickOnRoute(std::vector<G3D::Vector3>(points.begin(), points.end()), why);
+        }
+
+        // B: the party's route to the boss (corner points reach much farther),
+        // walked back from his end. Only a route that really reaches him.
+        if (!placed)
+        {
+            PathGenerator path(tank);
+            path.SetUseStraightPath(true);
+            path.CalculatePath(focusPos.GetPositionX(), focusPos.GetPositionY(), focusPos.GetPositionZ(), false);
+            Movement::PointsArray const& points = path.GetPath();
+            bool const reaches = points.size() >= 2 &&
+                !(path.GetPathType() & (PATHFIND_NOPATH | PATHFIND_INCOMPLETE | PATHFIND_SHORTCUT)) &&
+                focusPos.GetExactDist(points.back().x, points.back().y, points.back().z) <= 15.0f;
+            std::string reasonB;
+            if (!reaches)
+                reasonB = Acore::StringFormat("no complete route from the party (path type {})",
+                                              static_cast<uint32>(path.GetPathType()));
+            else
+                placed = pickOnRoute(std::vector<G3D::Vector3>(points.rbegin(), points.rend()), reasonB);
+            if (!placed)
+                why += "; " + reasonB;
+        }
+
+        if (placed)
             for (Slot const& slot : _slots)
                 if (Player* p = ObjectAccessor::FindPlayer(slot.guid))
                     if (p->GetMapId() == _mapId)
                         p->NearTeleportTo(_bossStartPos.GetPositionX(), _bossStartPos.GetPositionY(),
                                           _bossStartPos.GetPositionZ(), _bossStartPos.GetOrientation());
-            placed = true;
-        }
     }
 
     LOG_INFO("playerbots.dungeonclear",
-             "TESTRUN {} boss start: {} ({}) — killed {} trash within {:.0f}yd; {}",
-             _record.runId, focus->name, focus->entry, trash.size(), kBossTrashRadius,
+             "TESTRUN {} boss start: {} ({}) — {} spawns within {:.0f}yd: killed {}, kept {}, not loaded {}; {}",
+             _record.runId, focus->name, focus->entry, spawnsNear, kBossTrashRadius, trash.size(), kept, missing,
              placed ? Acore::StringFormat("party moved to {:.1f},{:.1f},{:.1f} ({:.0f}yd off)",
                                           _bossStartPos.GetPositionX(), _bossStartPos.GetPositionY(),
                                           _bossStartPos.GetPositionZ(), _bossStartPos.GetExactDist(&focusPos))
-                    : std::string(_bossStartNear ? "no safe navmesh start found, starting at the entrance"
-                                                 : "starting at the entrance"));
+                    : _bossStartNear ? "starting at the entrance: " + why : std::string("starting at the entrance"));
 
     if (!placed)
     {
