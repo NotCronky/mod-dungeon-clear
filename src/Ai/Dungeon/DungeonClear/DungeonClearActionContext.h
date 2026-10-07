@@ -57,6 +57,7 @@ public:
         creators["dungeon clear hakkar suppressor"] = &DungeonClearActionContext::hakkar_suppressor;
         creators["dungeon clear hakkar flame"] = &DungeonClearActionContext::hakkar_flame;
         creators["dungeon clear hakkar loot blood"] = &DungeonClearActionContext::hakkar_loot_blood;
+        creators["dungeon clear mc douse rune"] = &DungeonClearActionContext::mc_douse_rune;
 
         creators["dc on"] = &DungeonClearActionContext::dc_on;
         creators["dc off"] = &DungeonClearActionContext::dc_off;
@@ -126,6 +127,7 @@ private:
     static Action* hakkar_suppressor(PlayerbotAI* ai) { return new DungeonClearHakkarSuppressorAction(ai); }
     static Action* hakkar_flame(PlayerbotAI* ai) { return new DungeonClearHakkarFlameAction(ai); }
     static Action* hakkar_loot_blood(PlayerbotAI* ai) { return new DungeonClearHakkarLootBloodAction(ai); }
+    static Action* mc_douse_rune(PlayerbotAI* ai) { return new DungeonClearMcDouseRuneAction(ai); }
 
     static Action* dc_on(PlayerbotAI* ai) { return new DcOnAction(ai); }
     static Action* dc_off(PlayerbotAI* ai) { return new DcOffAction(ai); }

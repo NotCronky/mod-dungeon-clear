@@ -190,6 +190,16 @@ public:
     bool IsActive() override;
 };
 
+// --- Molten Core (map 409) Firelord runes ----------------------------------
+// The DC leader stands near a killed boss's rune that still awaits dousing (the
+// rune is active and selectable only in that window; see DcMoltenCoreRunes.cpp).
+class DungeonClearMcDouseRuneTrigger : public Trigger
+{
+public:
+    DungeonClearMcDouseRuneTrigger(PlayerbotAI* botAI) : Trigger(botAI, "dungeon clear mc douse rune", 1) {}
+    bool IsActive() override;
+};
+
 // Fires only while DC is enabled AND the advance/engage path has set a stall
 // reason. Drives the fallback "kill anything reachable" action.
 class DungeonClearStalledTrigger : public Trigger
