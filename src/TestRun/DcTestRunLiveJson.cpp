@@ -106,7 +106,8 @@ namespace DcTestRunLive
                   << ",\"alive\":" << (p.alive ? "true" : "false")
                   << ",\"hp\":" << static_cast<unsigned>(p.hp)
                   << ",\"inCombat\":" << (p.inCombat ? "true" : "false")
-                  << ",\"mp\":" << static_cast<int>(p.mp) << '}';
+                  << ",\"mp\":" << static_cast<int>(p.mp)
+                  << ",\"dmg\":" << p.damage << ",\"heal\":" << p.healing << ",\"act\":" << p.activeS << '}';
             }
             s << "]"
               << ",\"recent\":[";

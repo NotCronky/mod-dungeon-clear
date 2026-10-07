@@ -185,9 +185,16 @@ Each run also records a **rotation census** per party member: every spell it
 cast and how often, which casts the server refused and why (a spell that keeps
 failing for the same reason is a rotation reaching for something it can't use:
 wrong stance or form, out of range, no reagent), and the class abilities it
-knew but never cast. `python3 tools/dc_rotation_report.py` sums it
-per class and spec over the runs (`--last N`, `--class rogue`, `--per-run`, or a
-run id prefix).
+knew but never cast — plus a damage and healing meter (damage into enemies
+after absorbs, effective healing, and the active seconds they were dealt in).
+`python3 tools/dc_rotation_report.py` sums it per class and spec over the runs,
+with DPS / HPS (`--last N`, `--class rogue`, `--per-run`, or a run id prefix);
+the Test Deck shows the meter live on each run card.
+
+`boss=Name[,Name…]` on `.dc test start` scopes a run to those bosses (a name
+substring, `_` for a space, or an entry id): every other boss on the map is
+skipped and only these count, so `.dc test start mc 40 boss=garr` tests one
+raid boss. The Test Deck's launch form offers a boss picker on raid rows.
 
 **[Test Runs](https://github.com/jrad7/mod-dungeon-clear/wiki/Test-Runs)** —
 the full command reference, gear and party options, plans, watching, the

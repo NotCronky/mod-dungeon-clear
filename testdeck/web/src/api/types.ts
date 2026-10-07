@@ -57,6 +57,8 @@ export interface Dungeon {
   defaultSize?: number;
   gear?: GearChoice[];
   gearHeroic?: GearChoice[];
+  /* Raid rows: the map's bosses, which `boss=` can scope a run to. */
+  bosses?: { entry: number; name: string }[];
   /* SCENARIO rows (module T1): a slice of a parent dungeon — dropped at an
    * in-map point, scoped to `focus`, passing on its own `success` predicate.
    * Launched by its own token; the form locks the size to the parent's
@@ -95,6 +97,12 @@ export interface BotPos {
   hp?: number;
   mp?: number;        // -1 = no mana pool
   inCombat?: boolean;
+  /* Damage / healing meter since the clear started: damage into enemies after
+   * absorbs, effective healing, and the active seconds they were dealt in
+   * (DPS = dmg / act). Absent from an older worldserver. */
+  dmg?: number;
+  heal?: number;
+  act?: number;
 }
 
 export interface TimelineEntry {
@@ -207,6 +215,11 @@ export interface CompEntry {
   detectedRole?: string;
   roleMismatch?: boolean;
   from?: { map?: number; x?: number; y?: number; z?: number; o?: number };
+  /* Damage / healing meter (record schema 15+): damage into enemies after
+   * absorbs, effective healing, and the active seconds they were dealt in. */
+  damage?: number;
+  healing?: number;
+  activeS?: number;
 }
 
 export interface BossKill {

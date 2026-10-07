@@ -322,12 +322,89 @@ function RunCard({ run }: { run: LiveRun }) {
         </div>
       )}
 
+      <MeterPanel bots={bots} />
+
       {run.mapId ? <MapPanel mapId={run.mapId} bots={bots} /> : null}
 
       {run.timeline && run.timeline.length > 0 && (
         <TimelineFeed entries={run.timeline} startedS={run.elapsedS} />
       )}
     </Card>
+  );
+}
+
+/* Damage / healing meter. The module counts damage into enemies (after
+ * absorbs) and effective healing per member from the start of the clear, plus
+ * the active seconds they were dealt in, so a rate is the member's output
+ * while it was fighting rather than over the walks between packs. */
+function fmtAmount(n: number): string {
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+  return String(Math.round(n));
+}
+
+function MeterPanel({ bots }: { bots: BotPos[] }) {
+  const [kind, setKind] = useState<"dmg" | "heal">("dmg");
+  if (!bots.some((b) => b.dmg !== undefined)) return null;
+
+  const rows = bots
+    .map((b) => {
+      const total = (kind === "dmg" ? b.dmg : b.heal) ?? 0;
+      const act = b.act ?? 0;
+      return { b, total, rate: act > 0 ? total / act : 0 };
+    })
+    .filter((r) => r.total > 0)
+    .sort((x, y) => y.rate - x.rate);
+  const top = rows[0]?.rate || 1;
+  const sum = rows.reduce((acc, r) => acc + r.rate, 0);
+
+  return (
+    <div className="mt-4 rounded-lg border border-ink-800 p-3">
+      <div className="mb-2 flex items-center justify-between text-xs">
+        <div className="flex gap-1">
+          {(["dmg", "heal"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={`rounded px-2 py-0.5 ${
+                kind === k ? "bg-ink-700 text-ink-100" : "text-ink-400 hover:text-ink-200"
+              }`}
+            >
+              {k === "dmg" ? "Damage" : "Healing"}
+            </button>
+          ))}
+        </div>
+        <span className="text-ink-500">
+          party {fmtAmount(sum)} {kind === "dmg" ? "DPS" : "HPS"}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-ink-500">nothing yet</p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {rows.map(({ b, total, rate }, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className="w-28 shrink-0 truncate">
+                <ClassChip classId={b.cls} name={b.name} dead={b.alive === false} />
+              </span>
+              <span className="relative h-3 flex-1 overflow-hidden rounded bg-ink-800">
+                <span
+                  className={`block h-full ${kind === "dmg" ? "bg-red-500/60" : "bg-emerald-500/60"}`}
+                  style={{ width: `${Math.round((rate / top) * 100)}%` }}
+                />
+              </span>
+              <span className="w-14 shrink-0 text-right font-mono tabular-nums">
+                {fmtAmount(rate)}
+              </span>
+              <span className="w-24 shrink-0 text-right font-mono text-ink-500 tabular-nums">
+                {fmtAmount(total)} · {Math.round(b.act ?? 0)}s
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

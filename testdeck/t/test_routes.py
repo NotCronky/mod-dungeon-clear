@@ -131,6 +131,21 @@ def test_run_start_raid_size(client, cfg):
     assert br.cmds == [".dc test start mc size=10", ".dc test start mc"]
 
 
+def test_run_start_boss_focus(client, cfg):
+    """bosses= scopes the run (names get underscores for spaces); anything that
+    could break out of the command is refused before it reaches the server."""
+    write_catalogue(cfg)
+    br = use_bridge(["Test run started"])
+    r = client.post("/api/testruns/start",
+                    json={"dungeon": "mc", "size": 40, "bosses": ["12057", "Baron Geddon"]})
+    assert r.status_code == 200, r.text
+    assert br.cmds == [".dc test start mc size=40 boss=12057,Baron_Geddon"]
+    for bad in (["Garr; .server shutdown"], ["a,b"], ["x\n.y"], [""]):
+        r = client.post("/api/testruns/start", json={"dungeon": "mc", "bosses": bad})
+        assert r.status_code == 400, (bad, r.text)
+    assert len(br.cmds) == 1
+
+
 def test_plan_start_raid_size(client, cfg):
     write_catalogue(cfg)
     br = use_bridge(["Plan started"])

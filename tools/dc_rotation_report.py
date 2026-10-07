@@ -7,7 +7,7 @@
     dc_rotation_report.py --class rogue        one class
     dc_rotation_report.py --per-run            one block per party member instead of per class/spec
 
-Per class and spec, summed over the runs: each spell's casts and its share of the casts, how many casts the
+Per class and spec, summed over the runs: DPS / HPS over the active seconds (record schema 15+), each spell's casts and its share of the casts, how many casts the
 server refused and the most common reason (a spell that keeps failing for the same reason is a rotation
 reaching for something it can't use: wrong stance or form, out of range, no reagent), and the class
 abilities the bots knew but never cast.
@@ -76,10 +76,18 @@ def load_runs(path, prefix, last):
     return runs[-last:] if last else runs
 
 
-def print_block(title, runs, casts, failed, reasons, unused, members, names):
+def meter_text(damage, healing, active):
+    """'312 DPS, 14 HPS' over the active seconds (record schema 15+), or ''."""
+    if not active:
+        return ""
+    parts = [f"{damage / active:.0f} DPS" if damage else "", f"{healing / active:.0f} HPS" if healing else ""]
+    return ", ".join(p for p in parts if p)
+
+
+def print_block(title, runs, casts, failed, reasons, unused, members, names, meter=""):
     total = sum(casts.values())
     print(f"\n== {title}  ({members} member{'s' if members != 1 else ''} over {runs} run{'s' if runs != 1 else ''}, "
-          f"{total} casts)")
+          f"{total} casts{', ' + meter if meter else ''})")
     if not casts and not failed:
         print("   no spells cast or tried")
     rows = sorted(set(casts) | set(failed), key=lambda s: (-casts[s], -failed[s], s))
@@ -116,7 +124,8 @@ def main():
     print(f"{len(runs)} run(s) from {path}")
 
     groups = defaultdict(lambda: {"runs": set(), "members": 0, "casts": Counter(), "failed": Counter(),
-                                  "reasons": defaultdict(Counter), "unused": Counter()})
+                                  "reasons": defaultdict(Counter), "unused": Counter(),
+                                  "damage": 0, "healing": 0, "active": 0})
     for rec in runs:
         for member in rec.get("comp", []):
             if args.cls and member.get("class") != args.cls.lower():
@@ -129,6 +138,9 @@ def main():
             g = groups[key]
             g["runs"].add(rec["runId"])
             g["members"] += 1
+            g["damage"] += member.get("damage", 0)
+            g["healing"] += member.get("healing", 0)
+            g["active"] += member.get("activeS", 0)
             for spell in member.get("rotation", []):
                 g["casts"][spell["name"]] += spell["casts"]
                 g["failed"][spell["name"]] += spell.get("failed", 0)
@@ -139,7 +151,8 @@ def main():
 
     for key in sorted(groups):
         g = groups[key]
-        print_block(key, len(g["runs"]), g["casts"], g["failed"], g["reasons"], g["unused"], g["members"], names)
+        print_block(key, len(g["runs"]), g["casts"], g["failed"], g["reasons"], g["unused"], g["members"], names,
+                    meter_text(g["damage"], g["healing"], g["active"]))
 
 
 if __name__ == "__main__":

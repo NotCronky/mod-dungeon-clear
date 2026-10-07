@@ -55,6 +55,11 @@ namespace DcTestRunLive
         // field on purpose: the members above are positionally aggregate-
         // initialised in the tests, and appending keeps those call sites valid.
         std::string name;
+        // Damage / healing meter so far (DcRotationCensus::Meter), for the
+        // dashboard's DPS / HPS columns: totals plus active seconds.
+        std::uint64_t damage = 0;
+        std::uint64_t healing = 0;
+        std::uint32_t activeS = 0;
     };
 
     // One pool entry of a pool plan, with its own tallies so far.
