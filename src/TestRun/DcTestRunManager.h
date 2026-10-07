@@ -79,7 +79,8 @@ public:
                bool heroic, DcTestGearTiers::Spec const& gear, std::string* msg,
                std::string const& planId = "", StartErr* errOut = nullptr,
                std::string* runIdOut = nullptr, uint32 size = 0,
-               std::vector<std::string> const& bossFocus = {});
+               std::vector<std::string> const& bossFocus = {}, bool bossClearTrash = true,
+               bool bossStartNear = true);
 
     // Validate + launch a HAND-PICKED party (`.dc test start <d> party=a,b,c,d,e`).
     // `partySpec` is the raw comma-separated name list; roles are positional

@@ -8,15 +8,18 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <ctime>
 #include <limits>
 #include <optional>
 #include <set>
+#include <unordered_set>
 
 #include "CharacterCache.h"
 #include "DBCStores.h"
 #include "Chat.h"
 #include "Creature.h"
+#include "CreatureGroups.h"
 #include "Group.h"
 #include "GroupMgr.h"
 #include "Guild.h"
@@ -26,6 +29,8 @@
 #include "Log.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
+#include "PathGenerator.h"
 #include "Player.h"
 #include "StringFormat.h"
 #include "World.h"
@@ -1484,6 +1489,10 @@ void DcTestRunJob::TickStarting()
         // previous run's extras and progress count would leak into this one.
         DcRun::Of(ctx).ClearTestTelemetry();
 
+        // `boss=`: clear the boss's surroundings and start the party near it.
+        if (_bossFocused && !PrepareBossStart(tank, bosses))
+            return;
+
         // RAID runs lean on the playerbots raid strategies for the boss fights
         // (DC stands down during encounters), and those attach by mapId only
         // when AiPlayerbot.ApplyInstanceStrategies is on. A raid run with the
@@ -1547,6 +1556,159 @@ void DcTestRunJob::TickStarting()
 
     if (_stageMs >= START_TIMEOUT_MS)
         FailSetup("dc on did not take (look for 'DC command refused' in the DC log)");
+}
+
+namespace
+{
+    // How far from the boss a `boss=` run starts (straight line, yd), how much
+    // of its surroundings is cleared of trash, and the escort ring kept alive
+    // around it (adds that stand with the boss but are not linked to it).
+    constexpr float kBossStartDistance = 60.0f;
+    constexpr float kBossTrashRadius = 120.0f;
+    constexpr float kBossKeepRadius = 15.0f;
+    constexpr uint32 kBossStartSettleMs = 15000;
+
+    // A creature the `boss=` trash clear leaves standing: a roster boss, an add
+    // linked to one (formation or linked respawn), the focus boss's escort
+    // ring, and anything that is not a hostile, selectable combatant.
+    bool KeepForBossRun(Creature* c, Player* tank, std::unordered_set<uint32> const& bossEntries,
+                        Position const& focusPos)
+    {
+        if (bossEntries.count(c->GetEntry()) || c->IsDungeonBoss() || c->isWorldBoss())
+            return true;
+        if (!c->IsHostileTo(tank) || c->IsCritter() || c->IsTotem() ||
+            c->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || c->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
+            return true;
+        if (c->GetExactDist(&focusPos) <= kBossKeepRadius)
+            return true;
+        if (CreatureGroup* group = c->GetFormation())
+            if (Creature* leader = group->GetLeader())
+                if (leader != c && bossEntries.count(leader->GetEntry()))
+                    return true;
+        if (c->GetSpawnId())
+        {
+            ObjectGuid const linked =
+                sObjectMgr->GetLinkedRespawnGuid(ObjectGuid::Create<HighGuid::Unit>(c->GetEntry(), c->GetSpawnId()));
+            if (linked && bossEntries.count(linked.GetEntry()))
+                return true;
+        }
+        return false;
+    }
+}
+
+bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> const& bosses)
+{
+    if (_bossStart == BossStart::Done || _focus.empty() || (!_bossClearTrash && !_bossStartNear))
+        return true;
+
+    if (_bossStart == BossStart::Moving)
+    {
+        // Wait until everyone alive has landed at the start point (bounded).
+        bool arrived = true;
+        for (Slot const& slot : _slots)
+            if (Player* p = ObjectAccessor::FindPlayer(slot.guid))
+                if (p->IsAlive() && (p->GetMapId() != _mapId || p->GetExactDist(&_bossStartPos) > 20.0f))
+                    arrived = false;
+        if (!arrived && getMSTimeDiff(_bossStartSinceMs, getMSTime()) < kBossStartSettleMs)
+            return false;
+        _bossStart = BossStart::Done;
+        return true;
+    }
+
+    DungeonBossInfo const* focus = nullptr;
+    std::unordered_set<uint32> bossEntries;
+    for (DungeonBossInfo const& b : bosses)
+    {
+        bossEntries.insert(b.entry);
+        if (b.entry == _focus.front())
+            focus = &b;
+    }
+    Map* map = tank->GetMap();
+    if (!focus || !map)
+    {
+        _bossStart = BossStart::Done;
+        return true;
+    }
+
+    // The boss's grids are not loaded while the party stands at the entrance:
+    // load them so its creatures (and the navmesh around it) are there.
+    Position const focusPos(focus->x, focus->y, focus->z);
+    map->LoadGridsInRange(focusPos, kBossTrashRadius + 30.0f);
+
+    Creature* boss = nullptr;
+    std::vector<Creature*> trash;
+    for (auto const& [spawnId, c] : map->GetCreatureBySpawnIdStore())
+    {
+        if (!c || !c->IsInWorld() || !c->IsAlive())
+            continue;
+        if (c->GetEntry() == focus->entry && (!boss || c->GetExactDist(&focusPos) < boss->GetExactDist(&focusPos)))
+            boss = c;
+        if (_bossClearTrash && c->GetExactDist(&focusPos) <= kBossTrashRadius &&
+            !KeepForBossRun(c, tank, bossEntries, focusPos))
+            trash.push_back(c);
+    }
+
+    // Killed, not despawned: death scripts and instance hooks (doors, counters)
+    // still fire. Self-kills, so nobody gets loot or credit for them.
+    for (Creature* c : trash)
+        c->KillSelf(false);
+
+    // The start point: walk the navmesh path from the boss toward the entrance
+    // until the party would stand kStartDistance off him in a straight line.
+    bool placed = false;
+    if (_bossStartNear)
+    {
+        // From the boss's spot (live, or its spawn) back toward the party.
+        Position const from = boss ? boss->GetPosition() : focusPos;
+        PathGenerator path(tank);
+        path.CalculatePath(from.GetPositionX(), from.GetPositionY(), from.GetPositionZ(), tank->GetPositionX(),
+                           tank->GetPositionY(), tank->GetPositionZ(), false);
+        Movement::PointsArray const& points = path.GetPath();
+        G3D::Vector3 best;
+        float bestDist = 0.0f;
+        for (G3D::Vector3 const& p : points)
+        {
+            float const d = focusPos.GetExactDist(p.x, p.y, p.z);
+            if (d > bestDist)
+            {
+                best = p;
+                bestDist = d;
+            }
+            if (d >= kBossStartDistance)
+                break;
+        }
+        // A start no farther out than the boss's own room is no better than
+        // walking in: keep the entrance then.
+        if (bestDist >= kBossStartDistance * 0.5f)
+        {
+            float const facing = std::atan2(focusPos.GetPositionY() - best.y, focusPos.GetPositionX() - best.x);
+            _bossStartPos.Relocate(best.x, best.y, best.z + 0.5f, facing);
+            for (Slot const& slot : _slots)
+                if (Player* p = ObjectAccessor::FindPlayer(slot.guid))
+                    if (p->GetMapId() == _mapId)
+                        p->NearTeleportTo(_bossStartPos.GetPositionX(), _bossStartPos.GetPositionY(),
+                                          _bossStartPos.GetPositionZ(), _bossStartPos.GetOrientation());
+            placed = true;
+        }
+    }
+
+    LOG_INFO("playerbots.dungeonclear",
+             "TESTRUN {} boss start: {} ({}) — killed {} trash within {:.0f}yd; {}",
+             _record.runId, focus->name, focus->entry, trash.size(), kBossTrashRadius,
+             placed ? Acore::StringFormat("party moved to {:.1f},{:.1f},{:.1f} ({:.0f}yd off)",
+                                          _bossStartPos.GetPositionX(), _bossStartPos.GetPositionY(),
+                                          _bossStartPos.GetPositionZ(), _bossStartPos.GetExactDist(&focusPos))
+                    : std::string(_bossStartNear ? "no safe navmesh start found, starting at the entrance"
+                                                 : "starting at the entrance"));
+
+    if (!placed)
+    {
+        _bossStart = BossStart::Done;
+        return true;
+    }
+    _bossStart = BossStart::Moving;
+    _bossStartSinceMs = getMSTime();
+    return false;
 }
 
 void DcTestRunJob::ApplyScenarioSkips(Player* tank, AiObjectContext* ctx)

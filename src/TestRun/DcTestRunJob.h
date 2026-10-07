@@ -15,6 +15,8 @@
 #include <vector>
 
 #include "ObjectGuid.h"
+#include "Position.h"
+#include "Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h"
 #include "TestRun/DcTestDungeonRegistry.h"
 #include "TestRun/DcTestGearTiers.h"
 #include "TestRun/DcTestAreaTriggers.h"
@@ -130,7 +132,15 @@ public:
     // case-insensitive substrings, or entry ids), resolved against the map's
     // live roster at Starting. Every other boss is skipped and only these count,
     // exactly as a scenario row's focus does.
-    void SetBossFocus(std::vector<std::string> names) { _bossFocusNames = std::move(names); }
+    // By default a `boss=` run also kills the trash around that boss and starts
+    // the party at a safe distance from it (PrepareBossStart); `trash=keep` and
+    // `start=entrance` turn either off.
+    void SetBossFocus(std::vector<std::string> names, bool clearTrash = true, bool startNear = true)
+    {
+        _bossFocusNames = std::move(names);
+        _bossClearTrash = clearTrash;
+        _bossStartNear = startNear;
+    }
     std::string const& PlanId() const { return _record.planId; }
     std::string const& DungeonToken() const { return _dungeonToken; }
 
@@ -352,6 +362,18 @@ private:
     std::vector<std::string> _bossFocusNames;  // `boss=` as typed
     bool _bossFocused = false;                 // _focus came from `boss=`
     bool Focused() const { return _isScenario || _bossFocused; }
+
+    // `boss=` start: kill the trash around the first focus boss and move the
+    // party to a navmesh point a safe distance from it, then let `dc on` go.
+    // Returns true once the party stands at the start point (or there is
+    // nothing to do); false while it is still on its way.
+    bool PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> const& bosses);
+    bool _bossClearTrash = true;
+    bool _bossStartNear = true;
+    enum class BossStart : uint8 { Pending, Moving, Done };
+    BossStart _bossStart = BossStart::Pending;
+    Position _bossStartPos;
+    uint32 _bossStartSinceMs = 0;
     std::vector<uint32> _focus;             // roster entries the run is scoped to
     DcTestDungeonRegistry::SuccessPredicate _success;
     uint32 _successGraceMs = 0;

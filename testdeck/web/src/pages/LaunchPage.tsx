@@ -702,7 +702,7 @@ function LaunchDrawer({
                 </Field>
               )}
               {mode === "quick" && !scenario && (dungeon.bosses?.length ?? 0) > 0 && (
-                <Field label="Boss" hint="other bosses are skipped; trash on the way is cleared">
+                <Field label="Boss" hint="starts ~60yd from it with its trash killed; other bosses are skipped">
                   <select
                     value={boss}
                     onChange={(e) => setBoss(e.target.value)}
