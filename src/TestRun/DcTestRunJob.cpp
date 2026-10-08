@@ -1456,6 +1456,47 @@ void DcTestRunJob::TickStarting()
             _record.focus = _focus;
         }
 
+        // `from=`: the whole clear, starting at this boss.
+        if (!_startFromName.empty())
+        {
+            if (!_bossFocusNames.empty())
+            {
+                FailSetup("from= and boss= cannot be combined: boss= runs only those bosses, "
+                          "from= runs everything after one");
+                return;
+            }
+            uint32 const wantEntry = static_cast<uint32>(std::strtoul(_startFromName.c_str(), nullptr, 10));
+            std::string wantLower = _startFromName;
+            std::transform(wantLower.begin(), wantLower.end(), wantLower.begin(), ::tolower);
+            for (DungeonBossInfo const& b : bosses)
+            {
+                std::string nameLower = b.name;
+                std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+                if (b.kind == DungeonAnchorKind::Boss &&
+                    (wantEntry ? b.entry == wantEntry : nameLower.find(wantLower) != std::string::npos))
+                {
+                    _startFromEntry = b.entry;
+                    _startFromKey = BossOrderKey(b);
+                    break;
+                }
+            }
+            if (!_startFromEntry)
+            {
+                std::string names;
+                for (BossRef const& ref : _roster)
+                    if (ref.isBoss)
+                        names += (names.empty() ? "" : ", ") + ref.name;
+                FailSetup("from=" + _startFromName + " matches no boss on this map (" + names + ")");
+                return;
+            }
+            // Only what is left counts toward the run's total.
+            uint32 earlier = 0;
+            for (DungeonBossInfo const& b : bosses)
+                if (BossOrderKey(b) < _startFromKey)
+                    ++earlier;
+            _record.bossesTotal = _record.bossesTotal > earlier ? _record.bossesTotal - earlier : 0;
+        }
+
         // SCENARIO: the run is scoped to its focus. Every focus entry must be
         // on this map's live roster — the registry gtest can only check the
         // row's shape, not the roster BossSpawnIndex derives at runtime — and a
@@ -1516,6 +1557,10 @@ void DcTestRunJob::TickStarting()
         // `boss=`: clear the boss's surroundings and start the party near it.
         if (_bossFocused && !PrepareBossStart(tank, bosses))
             return;
+        // `from=`: everything before the start boss is done; start where the boss
+        // before it stood.
+        if (StartingFrom() && !PrepareStartFrom(tank, bosses))
+            return;
 
         // RAID runs lean on the playerbots raid strategies for the boss fights
         // (DC stands down during encounters), and those attach by mapId only
@@ -1557,6 +1602,21 @@ void DcTestRunJob::TickStarting()
                      _record.successPredicate.empty() ? "all-cleared" : _record.successPredicate,
                      _success.IsSet() ? " + " + std::to_string(_successGraceMs / 1000) + "s grace"
                                       : std::string());
+        }
+        else if (StartingFrom())
+        {
+            // Same timing as the scenario fill above: take the instance
+            // transition first so it cannot wipe the skips. The anchors before the
+            // start boss are done (killed, doused); skipping them as well keeps an
+            // objective with no completion signal of its own (a travel waypoint)
+            // from walking the raid back to it.
+            DcTargeting::ResetCompletionLatchesForNewInstance(tank, ctx);
+            std::unordered_set<uint32>& skipped =
+                ctx->GetValue<std::unordered_set<uint32>&>(DcKey::Skipped)->Get();
+            for (DungeonBossInfo const& b :
+                 ctx->GetValue<std::vector<DungeonBossInfo>>(DcKey::DungeonBosses)->Get())
+                if (BossOrderKey(b) < _startFromKey)
+                    skipped.insert(b.entry);
         }
         if (InstanceScript* inst = DcTargeting::GetInstanceScript(tank))
             _lastMask = inst->GetCompletedEncounterMask();
@@ -1903,6 +1963,157 @@ bool DcTestRunJob::PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> c
         _bossStart = BossStart::Done;
         return true;
     }
+    _bossStart = BossStart::Moving;
+    _bossStartSinceMs = getMSTime();
+    return false;
+}
+
+bool DcTestRunJob::PrepareStartFrom(Player* tank, std::vector<DungeonBossInfo> const& bosses)
+{
+    if (_bossStart == BossStart::Done)
+        return true;
+
+    if (_bossStart == BossStart::Moving)
+    {
+        bool arrived = true;
+        for (Slot const& slot : _slots)
+            if (Player* p = ObjectAccessor::FindPlayer(slot.guid))
+                if (p->IsAlive() && (p->GetMapId() != _mapId || p->GetExactDist(&_bossStartPos) > 20.0f))
+                    arrived = false;
+        if (!arrived && getMSTimeDiff(_bossStartSinceMs, getMSTime()) < kBossStartSettleMs)
+            return false;
+        _bossStart = BossStart::Done;
+        return true;
+    }
+
+    Map* map = tank ? tank->GetMap() : nullptr;
+    if (!map)
+    {
+        _bossStart = BossStart::Done;
+        return true;
+    }
+
+    // The roster bosses, and which of them come before the start.
+    std::unordered_set<uint32> bossEntries;
+    std::unordered_set<uint32> earlierBosses;
+    std::vector<DungeonBossInfo const*> anchors;  // roster bosses, for spawn ownership
+    DungeonBossInfo const* previous = nullptr;    // the last boss before the start
+    DungeonBossInfo const* start = nullptr;
+    for (DungeonBossInfo const& b : bosses)
+    {
+        bossEntries.insert(b.entry);
+        if (b.kind != DungeonAnchorKind::Boss)
+            continue;
+        anchors.push_back(&b);
+        if (b.entry == _startFromEntry)
+            start = &b;
+        if (BossOrderKey(b) < _startFromKey)
+        {
+            earlierBosses.insert(b.entry);
+            if (!previous || BossOrderKey(b) > BossOrderKey(*previous))
+                previous = &b;
+        }
+    }
+    if (!previous)
+    {
+        // The first boss: nothing to skip.
+        _bossStart = BossStart::Done;
+        return true;
+    }
+
+    // Every spawn belongs to its nearest roster boss. Kill the earlier bosses and
+    // every hostile that belongs to one of them; leave the start boss's own trash
+    // for the run. Killed, not despawned, as PrepareBossStart does: death scripts
+    // and instance hooks (boss states, runes, doors) still fire.
+    Position const nowhere(1.0e6f, 1.0e6f, 1.0e6f);
+    uint32 killedBosses = 0;
+    uint32 killedTrash = 0;
+    uint32 missing = 0;
+    std::vector<Creature*> victims;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+    {
+        if (data.mapid != _mapId || !(data.spawnMask & (1 << map->GetSpawnMode())))
+            continue;
+        DungeonBossInfo const* owner = nullptr;
+        float best = 0.0f;
+        for (DungeonBossInfo const* a : anchors)
+        {
+            float const d = Position(a->x, a->y, a->z).GetExactDist(data.posX, data.posY, data.posZ);
+            if (!owner || d < best)
+            {
+                owner = a;
+                best = d;
+            }
+        }
+        bool const isEarlierBoss = earlierBosses.count(data.id) != 0;
+        if (!isEarlierBoss && (!owner || !earlierBosses.count(owner->entry)))
+            continue;
+        map->LoadGrid(data.posX, data.posY);
+        auto const bounds = map->GetCreatureBySpawnIdStore().equal_range(spawnId);
+        if (bounds.first == bounds.second)
+        {
+            ++missing;
+            continue;
+        }
+        for (auto it = bounds.first; it != bounds.second; ++it)
+        {
+            Creature* c = it->second;
+            if (!c || !c->IsInWorld() || !c->IsAlive())
+                continue;
+            if (isEarlierBoss)
+            {
+                victims.push_back(c);
+                ++killedBosses;
+            }
+            else
+            {
+                // An earlier boss's own adds (Garr's Firesworn, Lucifron's
+                // Flamewaker Protectors) go with him; KeepForBossRun keeps a boss
+                // formation for the run.
+                bool earlyAdd = false;
+                if (CreatureGroup* group = c->GetFormation())
+                    if (Creature* leader = group->GetLeader())
+                        earlyAdd = leader != c && earlierBosses.count(leader->GetEntry()) != 0;
+                if (earlyAdd || !KeepForBossRun(c, tank, bossEntries, nowhere))
+                {
+                    victims.push_back(c);
+                    ++killedTrash;
+                }
+            }
+        }
+    }
+    for (Creature* c : victims)
+        c->KillSelf(false);
+
+    std::string prep;
+    if (_mapId == DcMoltenCore::MAP_ID)
+    {
+        if (_startFromEntry == DcMoltenCore::NPC_RAGNAROS)
+            prep = "; " + DcMoltenCore::ForceRagnaros(map, tank);
+        else if (_startFromEntry == DcMoltenCore::NPC_MAJORDOMO)
+            prep = "; " + DcMoltenCore::ForceMajordomo(map, tank);
+        else
+            prep = Acore::StringFormat("; doused {} Firelord runes", DcMoltenCore::DouseReadyRunes(map, tank));
+    }
+
+    // Start where the boss before it stood (his anchor: his spawn, or a pull-back
+    // boss's camp), facing the start boss.
+    _bossStartPos.Relocate(previous->x, previous->y, previous->z,
+                           start ? std::atan2(start->y - previous->y, start->x - previous->x) : 0.0f);
+    map->LoadGrid(_bossStartPos.GetPositionX(), _bossStartPos.GetPositionY());
+    for (Slot const& slot : _slots)
+        if (Player* p = ObjectAccessor::FindPlayer(slot.guid))
+            if (p->GetMapId() == _mapId)
+                p->NearTeleportTo(_bossStartPos.GetPositionX(), _bossStartPos.GetPositionY(),
+                                  _bossStartPos.GetPositionZ(), _bossStartPos.GetOrientation());
+
+    LOG_INFO("playerbots.dungeonclear",
+             "TESTRUN {} start from {} ({}): killed {} earlier bosses and {} of their trash ({} spawns not "
+             "loaded){}; party moved to {} ({:.1f},{:.1f},{:.1f})",
+             _record.runId, start ? start->name : _startFromName, _startFromEntry, killedBosses, killedTrash,
+             missing, prep, previous->name, _bossStartPos.GetPositionX(), _bossStartPos.GetPositionY(),
+             _bossStartPos.GetPositionZ());
+
     _bossStart = BossStart::Moving;
     _bossStartSinceMs = getMSTime();
     return false;

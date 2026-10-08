@@ -141,6 +141,13 @@ public:
         _bossClearTrash = clearTrash;
         _bossStartNear = startNear;
     }
+    // `from=` on `.dc test start`: run the WHOLE clear, but starting at this
+    // roster boss. Every anchor before it in the clear order is done before the
+    // run starts: its bosses and their trash are killed (each spawn belongs to
+    // its nearest roster boss), Molten Core's runes for them are doused, and the
+    // party starts where the boss before it stood (PrepareStartFrom).
+    void SetStartFrom(std::string name) { _startFromName = std::move(name); }
+
     std::string const& PlanId() const { return _record.planId; }
     std::string const& DungeonToken() const { return _dungeonToken; }
 
@@ -370,6 +377,15 @@ private:
     bool PrepareBossStart(Player* tank, std::vector<DungeonBossInfo> const& bosses);
     bool _bossClearTrash = true;
     bool _bossStartNear = true;
+
+    // `from=` start (SetStartFrom): the boss as typed, then resolved at Starting.
+    std::string _startFromName;
+    uint32 _startFromEntry = 0;
+    uint32 _startFromKey = 0;  // its BossOrderKey; every anchor below it is done
+    bool StartingFrom() const { return _startFromEntry != 0; }
+    // Kill what comes before the start boss and move the party to the boss
+    // before it. Same contract as PrepareBossStart: true once done.
+    bool PrepareStartFrom(Player* tank, std::vector<DungeonBossInfo> const& bosses);
     enum class BossStart : uint8 { Pending, Moving, Done };
     BossStart _bossStart = BossStart::Pending;
     Position _bossStartPos;

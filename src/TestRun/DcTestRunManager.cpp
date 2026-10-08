@@ -48,7 +48,7 @@ bool DcTestRunManager::Start(Player* gm, std::string const& dungeonToken,
                              DcTestGearTiers::Spec const& gear, std::string* msg,
                              std::string const& planId, StartErr* errOut, std::string* runIdOut,
                              uint32 size, std::vector<std::string> const& bossFocus, bool bossClearTrash,
-                             bool bossStartNear)
+                             bool bossStartNear, std::string const& startFrom)
 {
     if (errOut)
         *errOut = StartErr::None;
@@ -106,6 +106,8 @@ bool DcTestRunManager::Start(Player* gm, std::string const& dungeonToken,
         return fail(StartErr::PoolExhausted, err);
 
     job->SetBossFocus(bossFocus, bossClearTrash, bossStartNear);
+    if (!startFrom.empty())
+        job->SetStartFrom(startFrom);
 
     if (runIdOut)
         *runIdOut = job->RunId();

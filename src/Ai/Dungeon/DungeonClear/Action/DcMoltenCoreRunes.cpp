@@ -152,8 +152,21 @@ std::string DcMoltenCore::ForceMajordomo(Map* map, Player* user)
         if (inst->GetBossState(slot) != DONE && inst->SetBossState(slot, DONE))
             ++forced;
 
-    uint32 doused = 0;
     uint32 missing = 0;
+    uint32 const doused = DouseReadyRunes(map, user, &missing);
+
+    // The instance hands his GUID out under his boss slot (DATA_MAJORDOMO_EXECUTUS).
+    Creature const* majordomo = map->GetCreature(inst->GetGuidData(8));
+    bool const summoned = majordomo && majordomo->IsAlive();
+    return Acore::StringFormat("Majordomo prep: {} boss slots forced, {} runes doused, {} not loaded; Majordomo {}",
+                               forced, doused, missing, summoned ? "summoned" : "NOT summoned");
+}
+
+uint32 DcMoltenCore::DouseReadyRunes(Map* map, Player* user, uint32* missing)
+{
+    uint32 doused = 0;
+    if (!map || !user || map->GetId() != MAP_ID)
+        return 0;
     for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
     {
         if (data.mapid != MAP_ID ||
@@ -163,7 +176,8 @@ std::string DcMoltenCore::ForceMajordomo(Map* map, Player* user)
         auto const bounds = map->GetGameObjectBySpawnIdStore().equal_range(spawnId);
         if (bounds.first == bounds.second)
         {
-            ++missing;
+            if (missing)
+                ++*missing;
             continue;
         }
         GameObject* rune = bounds.first->second;
@@ -173,10 +187,5 @@ std::string DcMoltenCore::ForceMajordomo(Map* map, Player* user)
         if (rune->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
             ++doused;
     }
-
-    // The instance hands his GUID out under his boss slot (DATA_MAJORDOMO_EXECUTUS).
-    Creature const* majordomo = map->GetCreature(inst->GetGuidData(8));
-    bool const summoned = majordomo && majordomo->IsAlive();
-    return Acore::StringFormat("Majordomo prep: {} boss slots forced, {} runes doused, {} not loaded; Majordomo {}",
-                               forced, doused, missing, summoned ? "summoned" : "NOT summoned");
+    return doused;
 }
