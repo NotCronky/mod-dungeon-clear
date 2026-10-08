@@ -1975,13 +1975,32 @@ bool DcTestRunJob::PrepareStartFrom(Player* tank, std::vector<DungeonBossInfo> c
 
     if (_bossStart == BossStart::Moving)
     {
+        // Keep dousing while the party lands: a rune the instance readied a tick
+        // late (its boss's death resolving after the kill pass) is caught here.
+        // The run does not start while one is still waiting, within the settle
+        // bound, so Majordomo is never left unsummoned by the start itself.
+        Map* map = tank ? tank->GetMap() : nullptr;
+        uint32 waiting = 0;
+        if (map && _mapId == DcMoltenCore::MAP_ID && _startFromEntry != DcMoltenCore::NPC_MAJORDOMO &&
+            _startFromEntry != DcMoltenCore::NPC_RAGNAROS)
+        {
+            if (uint32 const late = DcMoltenCore::DouseReadyRunes(map, tank))
+                LOG_INFO("playerbots.dungeonclear", "TESTRUN {} start from: doused {} more Firelord runes",
+                         _record.runId, late);
+            waiting = DcMoltenCore::RunesAwaitingDouse(map);
+        }
         bool arrived = true;
         for (Slot const& slot : _slots)
             if (Player* p = ObjectAccessor::FindPlayer(slot.guid))
                 if (p->IsAlive() && (p->GetMapId() != _mapId || p->GetExactDist(&_bossStartPos) > 20.0f))
                     arrived = false;
-        if (!arrived && getMSTimeDiff(_bossStartSinceMs, getMSTime()) < kBossStartSettleMs)
+        if ((!arrived || waiting) && getMSTimeDiff(_bossStartSinceMs, getMSTime()) < kBossStartSettleMs)
             return false;
+        if (waiting)
+            LOG_WARN("playerbots.dungeonclear",
+                     "TESTRUN {} start from: {} Firelord runes still not doused at start — the clear's "
+                     "rune sweep before Majordomo will walk to them",
+                     _record.runId, waiting);
         _bossStart = BossStart::Done;
         return true;
     }
@@ -1992,6 +2011,11 @@ bool DcTestRunJob::PrepareStartFrom(Player* tank, std::vector<DungeonBossInfo> c
         _bossStart = BossStart::Done;
         return true;
     }
+
+    // Molten Core: the instance readies a rune on its boss's kill only if it has
+    // seen the rune spawn, so load every rune before anything dies.
+    if (_mapId == DcMoltenCore::MAP_ID)
+        DcMoltenCore::LoadRuneGrids(map);
 
     // The roster bosses, and which of them come before the start.
     std::unordered_set<uint32> bossEntries;
@@ -2093,7 +2117,11 @@ bool DcTestRunJob::PrepareStartFrom(Player* tank, std::vector<DungeonBossInfo> c
         else if (_startFromEntry == DcMoltenCore::NPC_MAJORDOMO)
             prep = "; " + DcMoltenCore::ForceMajordomo(map, tank);
         else
-            prep = Acore::StringFormat("; doused {} Firelord runes", DcMoltenCore::DouseReadyRunes(map, tank));
+        {
+            uint32 const doused = DcMoltenCore::DouseReadyRunes(map, tank);
+            prep = Acore::StringFormat("; doused {} Firelord runes, {} still waiting", doused,
+                                       DcMoltenCore::RunesAwaitingDouse(map));
+        }
     }
 
     // Start where the boss before it stood (his anchor: his spawn, or a pull-back
