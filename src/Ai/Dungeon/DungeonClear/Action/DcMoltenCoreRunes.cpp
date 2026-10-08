@@ -189,3 +189,31 @@ uint32 DcMoltenCore::DouseReadyRunes(Map* map, Player* user, uint32* missing)
     }
     return doused;
 }
+
+void DcMoltenCore::LoadRuneGrids(Map* map)
+{
+    if (!map || map->GetId() != MAP_ID)
+        return;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
+        if (data.mapid == MAP_ID &&
+            std::find(std::begin(DcMcRunes::RUNES), std::end(DcMcRunes::RUNES), data.id) != std::end(DcMcRunes::RUNES))
+            map->LoadGrid(data.posX, data.posY);
+}
+
+uint32 DcMoltenCore::RunesAwaitingDouse(Map* map)
+{
+    uint32 waiting = 0;
+    if (!map || map->GetId() != MAP_ID)
+        return 0;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
+    {
+        if (data.mapid != MAP_ID ||
+            std::find(std::begin(DcMcRunes::RUNES), std::end(DcMcRunes::RUNES), data.id) == std::end(DcMcRunes::RUNES))
+            continue;
+        auto const bounds = map->GetGameObjectBySpawnIdStore().equal_range(spawnId);
+        for (auto it = bounds.first; it != bounds.second; ++it)
+            if (DcMcRunes::AwaitsDouse(it->second))
+                ++waiting;
+    }
+    return waiting;
+}

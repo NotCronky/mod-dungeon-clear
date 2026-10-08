@@ -38,6 +38,14 @@ namespace DcMoltenCore
     // it). Sets *missing to the runes whose spawn is not loaded. Returns how
     // many it doused.
     uint32 DouseReadyRunes(Map* map, Player* user, uint32* missing = nullptr);
+
+    // Load the grid of every rune (and the fire circle beside it). The instance
+    // script only readies a rune on its boss's kill if it has seen the rune
+    // spawn, so a test start that kills bosses loads them first.
+    void LoadRuneGrids(Map* map);
+
+    // Runes still waiting to be doused (a killed boss's, active and selectable).
+    uint32 RunesAwaitingDouse(Map* map);
 }
 
 #endif
