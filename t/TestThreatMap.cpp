@@ -161,3 +161,29 @@ TEST(DcThreatMapPatrol, TheWindowWrapsRoundTheLoop)
     float const w = PatrolClearWindowSec(Square(), 2.0f, 0, 0, 0, 10, 15);
     EXPECT_NEAR(w, 190.0f, 3.0f);
 }
+
+namespace
+{
+    // Out along y=0 and back along y=3: two legs 3yd apart, the shape of Baron
+    // Geddon's loop down his corridor and back.
+    std::vector<PathPoint> OutAndBack()
+    {
+        return {{0, 0, 0}, {100, 0, 0}, {100, 3, 0}, {0, 3, 0}};
+    }
+}
+
+TEST(DcThreatMapPatrol, VelocityPicksTheLegHeIsWalking)
+{
+    // At x=50 between the legs; the target at x=95. Walking east (out) he is
+    // ~45yd away; walking west (back) he has the whole return leg first.
+    float const out = PatrolEtaSec(OutAndBack(), 50, 1.5f, 0, 2.0f, 95, 0, 0, 5, 15, 500, 2.5f, 0.0f);
+    float const back = PatrolEtaSec(OutAndBack(), 50, 1.5f, 0, 2.0f, 95, 0, 0, 5, 15, 500, -2.5f, 0.0f);
+    EXPECT_NEAR(out, 20.0f, 2.0f);
+    EXPECT_GT(back, 60.0f);
+}
+
+TEST(DcThreatMapPatrol, StandingStillTakesTheSoonerLeg)
+{
+    float const still = PatrolEtaSec(OutAndBack(), 50, 1.5f, 0, 2.0f, 95, 0, 0, 5, 15, 500);
+    EXPECT_NEAR(still, 20.0f, 2.0f);
+}

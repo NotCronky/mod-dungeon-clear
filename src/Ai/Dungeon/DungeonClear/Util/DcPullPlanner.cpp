@@ -838,8 +838,19 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
             : std::nullopt;
         uint32 const now = getMSTime();
         uint32 const capMs = static_cast<uint32>(DcSettings::GetFloat(bot, "PullPatrolBossHoldSec") * 1000.0f);
-        if (due && due->who->entry != target->GetEntry() &&
-            (!pull.patrolBossHoldSince || now - pull.patrolBossHoldSince < capMs))
+        bool const holdDue = due && due->who->entry != target->GetEntry();
+        // The cap's clock only restarts once nothing has been due for a while: a
+        // boss whose loop keeps him coming back must not reset it by dropping out
+        // of the horizon for a tick (tr-20261008-010759-1 held 20 minutes in 20s
+        // cycles, each starting again from 0s).
+        constexpr uint32 kHoldClearResetMs = 10000;
+        if (holdDue)
+            pull.patrolBossClearSince = 0;
+        else if (!pull.patrolBossClearSince)
+            pull.patrolBossClearSince = now ? now : 1;
+        if (!holdDue && pull.patrolBossClearSince && now - pull.patrolBossClearSince >= kHoldClearResetMs)
+            pull.patrolBossHoldSince = 0;
+        if (holdDue && (!pull.patrolBossHoldSince || now - pull.patrolBossHoldSince < capMs))
         {
             if (!pull.patrolBossHoldSince)
                 pull.patrolBossHoldSince = now ? now : 1;
@@ -847,17 +858,17 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
             {
                 pull.patrolBossHoldLogMs = now ? now : 1;
                 CreatureTemplate const* ct = sObjectMgr->GetCreatureTemplate(due->who->entry);
-                DC_PULL_INFO("[DC:{}] patrol-boss hold: {} ({}) due within {:.0f}yd of {} (entry {}) in "
-                             "{:.0f}s -> holding the pull ({}s so far)",
-                             bot->GetName(), ct ? ct->Name : "?", due->who->entry, clearance,
-                             target->GetName(), target->GetEntry(), due->etaSec,
+                DC_PULL_INFO("[DC:{}] patrol-boss hold: {} ({}) at ({:.0f},{:.0f}) moving ({:.1f},{:.1f}) due "
+                             "within {:.0f}yd of {} (entry {}) at ({:.0f},{:.0f}) in {:.0f}s -> holding the pull "
+                             "({}s so far)",
+                             bot->GetName(), ct ? ct->Name : "?", due->who->entry, due->who->x, due->who->y,
+                             due->who->vx, due->who->vy, clearance, target->GetName(), target->GetEntry(),
+                             target->GetPositionX(), target->GetPositionY(), due->etaSec,
                              (now - pull.patrolBossHoldSince) / 1000u);
             }
             apply(false, DcPullDecisionCode::PatrolHold);
             return;
         }
-        if (!due)
-            pull.patrolBossHoldSince = 0;
     }
 
     bool const insideNeighbour =

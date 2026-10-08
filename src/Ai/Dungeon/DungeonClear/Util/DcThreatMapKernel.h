@@ -125,48 +125,29 @@ namespace DcThreatMapKernel
     // Seconds until a patroller walking its CYCLIC waypoint loop `path` from
     // (x,y,z) at `speed` yd/s first comes within `radius` (2D, inside
     // `heightBand`) of the target point; 0 if it already is; kNever if not within
-    // `horizonSec`. The patroller is placed on its nearest path segment and walks
-    // forward (waypoint order), which is how a MovementType 2 creature loops.
-    inline float PatrolEtaSec(std::vector<PathPoint> const& path, float x, float y, float z, float speed,
-                              float tx, float ty, float tz, float radius, float heightBand, float horizonSec)
+    // `horizonSec`. The patroller walks forward (waypoint order), which is how a
+    // MovementType 2 creature loops.
+    //
+    // WHICH LEG he is on: a loop can run out and back down one corridor (Baron
+    // Geddon's legs lie 2-4yd apart for most of it), so the nearest segment is
+    // ambiguous. Every segment within kLegAmbiguityYd of the nearest is a
+    // candidate; with a live velocity (vx, vy) the one he is walking along wins,
+    // and without one the soonest arrival is taken, the safe answer. Snapping to
+    // the nearest alone flipped legs tick to tick and the hold never let a pull
+    // go (tr-20261008-010759-1).
+    inline constexpr float kLegAmbiguityYd = 6.0f;
+    inline constexpr float kMovingYdPerSec = 0.3f;
+
+    inline float PatrolEtaFromSegment(std::vector<PathPoint> const& path, std::size_t seg, float segT, float speed,
+                                      float tx, float ty, float tz, float radius, float heightBand, float horizonSec)
     {
+        std::size_t const n = path.size();
         auto within = [&](float px, float py, float pz)
         {
             float const dx = px - tx;
             float const dy = py - ty;
             return dx * dx + dy * dy <= radius * radius && std::fabs(pz - tz) <= heightBand;
         };
-        if (within(x, y, z))
-            return 0.0f;
-        std::size_t const n = path.size();
-        if (n < 2 || speed <= 0.0f || horizonSec <= 0.0f)
-            return kNever;
-
-        // Nearest segment (i -> i+1, wrapping) and the projection onto it.
-        std::size_t seg = 0;
-        float segT = 0.0f;
-        float best = -1.0f;
-        for (std::size_t i = 0; i < n; ++i)
-        {
-            PathPoint const& a = path[i];
-            PathPoint const& b = path[(i + 1) % n];
-            float const ex = b.x - a.x;
-            float const ey = b.y - a.y;
-            float const len2 = ex * ex + ey * ey;
-            float t = len2 > 0.0f ? ((x - a.x) * ex + (y - a.y) * ey) / len2 : 0.0f;
-            t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
-            float const px = a.x + ex * t - x;
-            float const py = a.y + ey * t - y;
-            float const pz = a.z + (b.z - a.z) * t - z;
-            float const d2 = px * px + py * py + pz * pz;
-            if (best < 0.0f || d2 < best)
-            {
-                best = d2;
-                seg = i;
-                segT = t;
-            }
-        }
-
         float const maxDist = speed * horizonSec;
         float walked = 0.0f;
         float t = segT;
@@ -195,6 +176,75 @@ namespace DcThreatMapKernel
             i = (i + 1) % n;
         }
         return kNever;
+    }
+
+    inline float PatrolEtaSec(std::vector<PathPoint> const& path, float x, float y, float z, float speed,
+                              float tx, float ty, float tz, float radius, float heightBand, float horizonSec,
+                              float vx = 0.0f, float vy = 0.0f)
+    {
+        {
+            float const dx = x - tx;
+            float const dy = y - ty;
+            if (dx * dx + dy * dy <= radius * radius && std::fabs(z - tz) <= heightBand)
+                return 0.0f;
+        }
+        std::size_t const n = path.size();
+        if (n < 2 || speed <= 0.0f || horizonSec <= 0.0f)
+            return kNever;
+
+        struct Proj
+        {
+            std::size_t seg;
+            float t;
+            float dist;
+            float align;  // cosine between the segment and the velocity
+        };
+        std::vector<Proj> projs;
+        projs.reserve(n);
+        float nearest = -1.0f;
+        float const vlen = std::sqrt(vx * vx + vy * vy);
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            PathPoint const& a = path[i];
+            PathPoint const& b = path[(i + 1) % n];
+            float const ex = b.x - a.x;
+            float const ey = b.y - a.y;
+            float const len2 = ex * ex + ey * ey;
+            float t = len2 > 0.0f ? ((x - a.x) * ex + (y - a.y) * ey) / len2 : 0.0f;
+            t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+            float const px = a.x + ex * t - x;
+            float const py = a.y + ey * t - y;
+            float const pz = a.z + (b.z - a.z) * t - z;
+            float const dist = std::sqrt(px * px + py * py + pz * pz);
+            float const elen = std::sqrt(len2);
+            float const align = vlen >= kMovingYdPerSec && elen > 0.0f ? (ex * vx + ey * vy) / (elen * vlen) : 0.0f;
+            projs.push_back({i, t, dist, align});
+            if (nearest < 0.0f || dist < nearest)
+                nearest = dist;
+        }
+
+        bool const moving = vlen >= kMovingYdPerSec;
+        float best = kNever;
+        float bestAlign = -2.0f;
+        for (Proj const& pr : projs)
+        {
+            if (pr.dist > nearest + kLegAmbiguityYd)
+                continue;
+            float const eta = PatrolEtaFromSegment(path, pr.seg, pr.t, speed, tx, ty, tz, radius, heightBand,
+                                                   horizonSec);
+            if (moving)
+            {
+                // The leg he is walking along; its ETA, whatever it is.
+                if (pr.align > bestAlign)
+                {
+                    bestAlign = pr.align;
+                    best = eta;
+                }
+            }
+            else if (eta != kNever && (best == kNever || eta < best))
+                best = eta;
+        }
+        return best;
     }
 
     // The longest stretch of the loop, in seconds at `speed`, the patroller

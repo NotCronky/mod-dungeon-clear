@@ -408,6 +408,8 @@ struct DcPullContext
                                                  // boss due through the fight began; 0 =
                                                  // not holding (PullPatrolBossHoldSec cap)
     uint32      patrolBossHoldLogMs = 0;         // throttle for the hold's log line
+    uint32      patrolBossClearSince = 0;        // getMSTime() no patrolling boss has been
+                                                 // due since; 0 = one is due
     uint32      patrolWaitSince = 0;             // getMSTime() the current pull first
                                                  // read patrol-contended (a lone
                                                  // patroller is the only thing over
@@ -489,6 +491,7 @@ struct DcPullContext
         decisionSince   = 0;
         patrolWaitSince = 0;
         patrolBossHoldSince = 0;
+        patrolBossClearSince = 0;
         targetLostSince = 0;
     }
 
