@@ -146,6 +146,23 @@ def test_run_start_boss_focus(client, cfg):
     assert len(br.cmds) == 1
 
 
+def test_run_start_from_boss(client, cfg):
+    """startFrom= runs the whole clear from one boss; it cannot be combined with
+    bosses=, and is validated like a boss name."""
+    write_catalogue(cfg)
+    br = use_bridge(["Test run started"])
+    r = client.post("/api/testruns/start",
+                    json={"dungeon": "mc", "size": 40, "startFrom": "Sulfuron Harbinger"})
+    assert r.status_code == 200, r.text
+    assert br.cmds == [".dc test start mc size=40 from=Sulfuron_Harbinger"]
+    r = client.post("/api/testruns/start",
+                    json={"dungeon": "mc", "bosses": ["12057"], "startFrom": "12098"})
+    assert r.status_code == 400, r.text
+    r = client.post("/api/testruns/start", json={"dungeon": "mc", "startFrom": "x; .server shutdown"})
+    assert r.status_code == 400, r.text
+    assert len(br.cmds) == 1
+
+
 def test_plan_start_raid_size(client, cfg):
     write_catalogue(cfg)
     br = use_bridge(["Plan started"])

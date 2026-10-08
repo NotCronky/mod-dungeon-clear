@@ -473,7 +473,7 @@ public:
         static constexpr char const* kUsage =
             "Usage: .dc test start <dungeon> [heroic] [size=N|10|25] [level=N] [seed=N] "
             "[ilvl=N|none] [quality=normal|uncommon|rare|epic|legendary]\n"
-            "       [boss=Name[,Name...] [trash=keep] [start=entrance]]\n"
+            "       [boss=Name[,Name...] [trash=keep] [start=entrance]] [from=Name]\n"
             "   or: .dc test start <dungeon> party=Tank,Heal,Dps1,Dps2,... [heroic]";
 
         std::string token;
@@ -488,6 +488,9 @@ public:
         // safe distance from it; trash=keep / start=entrance turn those off.
         bool bossClearTrash = true;
         bool bossStartNear = true;
+        // from=Golemagg: the whole clear, starting at this boss — everything
+        // before it is killed first and the party starts at the boss before it.
+        std::string startFrom;
         DcTestGearTiers::Spec gear;
         bool heroic = false;
         std::istringstream in{std::string(args)};
@@ -524,6 +527,11 @@ public:
                 bossClearTrash = false;
             else if (word == "start=entrance")
                 bossStartNear = false;
+            else if (word.rfind("from=", 0) == 0)
+            {
+                startFrom = word.substr(5);
+                std::replace(startFrom.begin(), startFrom.end(), '_', ' ');
+            }
             else if (word.rfind("boss=", 0) == 0)
             {
                 std::istringstream list{word.substr(5)};
@@ -583,7 +591,7 @@ public:
             }
             DcTestRunManager::Instance().Start(issuer, token, level, seed, heroic, gear, &msg,
                                                "", nullptr, nullptr, size, bossFocus, bossClearTrash,
-                                               bossStartNear);
+                                               bossStartNear, startFrom);
         }
         handler->SendSysMessage(msg);
         return true;

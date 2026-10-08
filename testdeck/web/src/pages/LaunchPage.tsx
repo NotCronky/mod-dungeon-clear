@@ -383,6 +383,9 @@ function LaunchDrawer({
   const [quality, setQuality] = useState(0);
   /* Raid rows: one boss to test, as its entry id; "" = the whole raid. */
   const [boss, setBoss] = useState("");
+  /* "only" = boss= (that boss alone, its trash killed); "from" = from= (the
+   * whole clear from that boss, everything before it killed first). */
+  const [bossMode, setBossMode] = useState<"only" | "from">("only");
   const [totalText, setTotalText] = useState("5");
   const [concurrentText, setConcurrentText] = useState("1");
   const [rosters, setRosters] = useState<SavedRoster[] | null>(null);
@@ -480,7 +483,8 @@ function LaunchDrawer({
           size,
           ilvl,
           quality,
-          bosses: mode === "quick" && boss ? [boss] : [],
+          bosses: mode === "quick" && boss && bossMode === "only" ? [boss] : [],
+          startFrom: mode === "quick" && boss && bossMode === "from" ? boss : undefined,
         },
         (attempt, of) => {
           setBusy(`driver logging in — retrying (${attempt}/${of})…`);
@@ -702,7 +706,14 @@ function LaunchDrawer({
                 </Field>
               )}
               {mode === "quick" && !scenario && (dungeon.bosses?.length ?? 0) > 0 && (
-                <Field label="Boss" hint="starts ~60yd from it with its trash killed; other bosses are skipped">
+                <Field
+                  label="Boss"
+                  hint={
+                    bossMode === "from"
+                      ? "the whole clear from this boss: earlier bosses and their trash are killed first"
+                      : "starts ~60yd from it with its trash killed; other bosses are skipped"
+                  }
+                >
                   <select
                     value={boss}
                     onChange={(e) => setBoss(e.target.value)}
@@ -714,6 +725,18 @@ function LaunchDrawer({
                         {b.name}
                       </option>
                     ))}
+                  </select>
+                </Field>
+              )}
+              {mode === "quick" && !scenario && boss && (
+                <Field label="Run" hint="only this boss, or carry on through the rest of the raid">
+                  <select
+                    value={bossMode}
+                    onChange={(e) => setBossMode(e.target.value as "only" | "from")}
+                    className={SELECT}
+                  >
+                    <option value="only">only this boss</option>
+                    <option value="from">start the clear here</option>
                   </select>
                 </Field>
               )}

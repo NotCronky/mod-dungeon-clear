@@ -166,6 +166,9 @@ class RunStartRequest(BaseModel):
     # Scope the run to these bosses (catalogue "bosses" names or entry ids);
     # every other boss on the map is skipped. Empty = the whole dungeon.
     bosses: list[str] = []
+    # Run the whole clear starting at this boss (name or entry id): everything
+    # before it is killed first. Empty = from the first boss.
+    startFrom: str = ""
 
 
 # A boss name or entry id as it may appear in `boss=`: it ends up inside a
@@ -210,6 +213,12 @@ async def api_testruns_start(req: RunStartRequest, request: Request):
         if len(req.bosses) > 20 or not all(_BOSS_RE.match(b) for b in req.bosses):
             raise HTTPException(400, "bosses must be boss names or entry ids")
         cmd += " boss=" + ",".join(b.strip().replace(" ", "_") for b in req.bosses)
+    if req.startFrom:
+        if req.bosses:
+            raise HTTPException(400, "startFrom and bosses cannot be combined")
+        if not _BOSS_RE.match(req.startFrom):
+            raise HTTPException(400, "startFrom must be a boss name or entry id")
+        cmd += " from=" + req.startFrom.strip().replace(" ", "_")
     audit(request, cmd)
     reply = await ctx.bridge.exec(cmd)
     return bridge_mod.public_reply(reply, cmd)

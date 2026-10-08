@@ -32,6 +32,12 @@ namespace DcMoltenCore
     // marked DONE first: the instance script then summons him friendly at
     // Ragnaros' lair, where the run's "Summon Ragnaros" objective talks to him.
     std::string ForceRagnaros(Map* map, Player* user);
+
+    // Douse, by `user`, every rune whose boss is dead and that is still waiting
+    // (the runes a `from=` test start leaves behind by killing the bosses before
+    // it). Sets *missing to the runes whose spawn is not loaded. Returns how
+    // many it doused.
+    uint32 DouseReadyRunes(Map* map, Player* user, uint32* missing = nullptr);
 }
 
 #endif
