@@ -231,7 +231,8 @@ std::optional<DcPatrolArrival> DcThreatMap::NextPatrollingBoss(float x, float y,
         if (!e.alive || !e.boss || !e.patrols || e.inCombat || e.path.empty())
             continue;
         float const eta = DcThreatMapKernel::PatrolEtaSec(e.path, e.x, e.y, e.z, e.walkSpeed, x, y, z, radius,
-                                                          BossSpawnIndex::PatrolThreatHeightBand, horizonSec);
+                                                          BossSpawnIndex::PatrolThreatHeightBand, horizonSec,
+                                                          e.vx, e.vy);
         if (eta == DcThreatMapKernel::kNever)
             continue;
         // Waiting only helps when the loop leaves a gap the fight fits in.
