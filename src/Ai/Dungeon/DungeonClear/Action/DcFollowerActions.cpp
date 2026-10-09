@@ -2109,10 +2109,10 @@ bool DungeonClearLeaderAssistAction::Execute(Event /*event*/)
 
 namespace
 {
-    // The stock playerbots out-of-combat rez action per class (each subclasses
+    // The stock playerbots rez action per class (each subclasses
     // ResurrectPartyMemberAction and targets "party member to resurrect").
-    // Druid battle-rez ("rebirth") is deliberately out of scope for v1 — this
-    // rung only runs out of combat.
+    // A druid's is Rebirth: "revive" is Cataclysm's and no realm here has it.
+    // DcRezRecovery only elects a druid whose Rebirth is ready.
     char const* RezActionNameFor(uint8 playerClass)
     {
         switch (playerClass)
@@ -2120,7 +2120,7 @@ namespace
             case CLASS_PRIEST:  return "resurrection";
             case CLASS_PALADIN: return "redemption";
             case CLASS_SHAMAN:  return "ancestral spirit";
-            case CLASS_DRUID:   return "revive";
+            case CLASS_DRUID:   return "rebirth";
             default:            return nullptr;
         }
     }
@@ -2340,8 +2340,8 @@ bool DungeonClearRezPartyAction::Execute(Event /*event*/)
     DcMovement::StopBot(bot, DcMovement::Stop::Soft);
     // The one prerequisite the stock action carried that a direct cast would
     // otherwise drop: a druid's feral forms are CAN_ONLY_CAST_SHAPESHIFT_SPELLS, so
-    // Revive fails CheckShapeshift before it reaches the corpse. Shift back exactly
-    // as CastReviveAction::getPrerequisites does. No-op for everyone else. (Same
+    // Rebirth fails CheckShapeshift before it reaches the corpse. Shift back exactly
+    // as CastRebirthAction::getPrerequisites does. No-op for everyone else. (Same
     // mechanism as DcFormGate, which gates items rather than spells.)
     if (bot->GetShapeshiftForm() != FORM_NONE)
         botAI->DoSpecificAction("caster form", Event(), /*silent*/ true);

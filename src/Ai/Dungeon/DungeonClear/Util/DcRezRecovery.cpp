@@ -32,6 +32,8 @@
 #include "Group.h"
 #include "InstanceScript.h"
 #include "Log.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Map.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -42,6 +44,33 @@ namespace
 {
     using DcRezDecision::Member;
 
+    // Rebirth, every rank from 1.12 to 3.3.5. Before Cataclysm's Revive it is a druid's
+    // only resurrect, in or out of combat, on a 20-30 minute cooldown and a reagent.
+    constexpr uint32 REBIRTH_RANKS[] = { 48477, 26994, 20748, 20747, 20742, 20739, 20484 };
+
+    // Can this druid Rebirth right now: knows a rank, it is off cooldown, and the reagent
+    // is in the bags. Counting a druid whose Rebirth is down as a rezzer elected it and
+    // then waited the whole recovery budget for a cast that could never land ("couldn't
+    // get X resurrected in time" with a druid healer at full mana).
+    bool RebirthReady(Player const* p)
+    {
+        for (uint32 const id : REBIRTH_RANKS)
+        {
+            if (!p->HasSpell(id))
+                continue;
+            if (p->HasSpellCooldown(id))
+                return false;
+            SpellInfo const* info = sSpellMgr->GetSpellInfo(id);
+            if (!info)
+                return false;
+            for (uint8 i = 0; i < MAX_SPELL_REAGENTS; ++i)
+                if (info->Reagent[i] > 0 && !p->HasItemCount(uint32(info->Reagent[i]), info->ReagentCount[i]))
+                    return false;
+            return true;
+        }
+        return false;
+    }
+
     bool IsRezClass(Player const* p)
     {
         switch (p->getClass())
@@ -49,8 +78,9 @@ namespace
             case CLASS_PRIEST:
             case CLASS_PALADIN:
             case CLASS_SHAMAN:
-            case CLASS_DRUID:
                 return true;
+            case CLASS_DRUID:
+                return RebirthReady(p);
             default:
                 return false;
         }
