@@ -959,7 +959,11 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
             float const holdSlack = sameTarget && pull.decision == DcPullDecisionCode::PatrolHold
                 ? DC_PATROL_HOLD_SLACK : 0.0f;
             obs.atCommitRange = bot->GetExactDist2d(target) <= commitRange + holdSlack;
-            if (obs.atCommitRange)
+            // A pull that stays a drag without the patrol is held from first sight
+            // (DecidePull: no Leeroy walk-in), and a held tank does not close in, so
+            // its clock runs from there: started only at commit range it never ran
+            // and the hold never ended (tr-20261009-032623-1, 270s+ on a Ramparts pack).
+            if (obs.atCommitRange || (obs.patrolContended && !obs.patrolLeeroyable))
             {
                 uint32 const waitMs =
                     uint32(DcSettings::GetFloat(bot, "PullPatrolWaitSec") * 1000.0f);
@@ -975,10 +979,6 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         switch (v)
         {
             case DcPullDecision::PullVerdict::PatrolWaitHold:
-                // Approaching under the hold (a pack that stays a drag without the
-                // patrol): the wait clock only runs from commit range.
-                if (!obs.atCommitRange)
-                    pull.patrolWaitSince = 0;
                 apply(false, DcPullDecisionCode::PatrolHold);  // hold at commit range; pull mode off, no tag
                 DC_PULL_INFO("[DC:{}] dynamic: pack {} patrol-contended (full {} > "
                              "ceiling {}, reduced {}) -> WAITING for patrol",
