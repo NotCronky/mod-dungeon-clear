@@ -16,7 +16,7 @@ std::uint32_t DungeonClearMath::EstimateAggroCount(std::vector<DynPullMob> const
                                                    float combatSpread,
                                                    float assistRadius,
                                                    float zTolerance,
-                                                   bool excludeLonePatrollers,
+                                                   bool excludePatrols,
                                                    std::vector<std::size_t>* countedOut,
                                                    std::uint32_t* weightThirdsOut)
 {
@@ -25,15 +25,6 @@ std::uint32_t DungeonClearMath::EstimateAggroCount(std::vector<DynPullMob> const
     std::size_t const n = mobs.size();
     if (n == 0 || targetIdx >= n)
         return 0;
-
-    // Patrol-wait reduced pass: a lone patroller (no atomic pack) is treated as if
-    // it had walked out of range — not eligible to seed, assist, or be assisted.
-    // Formation/linked patrollers (packId != 0) are unaffected.
-    auto eligible = [&](std::size_t i)
-    {
-        return mobs[i].chainEligible &&
-               !(excludeLonePatrollers && mobs[i].patroller && mobs[i].packId == 0);
-    };
 
     auto dist2d = [&](std::size_t a, std::size_t b)
     {
@@ -69,6 +60,24 @@ std::uint32_t DungeonClearMath::EstimateAggroCount(std::vector<DynPullMob> const
         for (std::size_t j = i + 1; j < n; ++j)
             if (mobs[i].packId != 0 && mobs[i].packId == mobs[j].packId)
                 parent[find(i)] = find(j);
+
+    // Patrol-wait reduced pass ("if we let the patrol walk on"). A patrol is a lone
+    // waypoint mover or a whole pack with one among it: a formation walks with its
+    // leader, so it can be waited out whole. Another pack's patrol is treated as
+    // gone: it neither seeds, assists nor is assisted. When the TARGET's pack is
+    // the patrol, the pass models it having walked clear of the rest: only its own
+    // pack counts (Ramparts heroic: a Ravener and two Warhounds tagged while they
+    // passed a Destroyer and two Darkcasters, tr-20261009-031103-1).
+    std::vector<char> patrolRoot(n, 0);
+    if (excludePatrols)
+        for (std::size_t i = 0; i < n; ++i)
+            if (mobs[i].patroller)
+                patrolRoot[find(i)] = 1;
+    bool const targetPatrols = excludePatrols && patrolRoot[find(targetIdx)];
+    auto eligible = [&](std::size_t i)
+    {
+        return mobs[i].chainEligible && !targetPatrols && !(excludePatrols && patrolRoot[find(i)]);
+    };
 
     std::vector<char> inSet(n, 0);
 
@@ -294,9 +303,9 @@ bool DungeonClearMath::ShouldWaitForPatrol(std::uint32_t fullCount,
                                            std::uint32_t now, std::uint32_t waitMs,
                                            std::uint32_t& waitSinceOut)
 {
-    // Patrol-contended only when the lone patrollers are the ONLY reason the pull
-    // is over the ceiling: full over, reduced (without them) at/under.
-    bool const contended = fullCount > ceiling && reducedCount <= ceiling;
+    // Patrol-contended when the pull is over the ceiling AND a patrol is making it
+    // bigger than it would be once the patrol walks on: full over both.
+    bool const contended = fullCount > ceiling && fullCount > reducedCount;
     if (!contended)
     {
         waitSinceOut = 0;

@@ -1067,7 +1067,7 @@ namespace
     {
         std::uint32_t w = 0;
         DungeonClearMath::EstimateAggroCount(m, t, kSpread, kAssistR, kZTol,
-                                             /*excludeLonePatrollers*/ false,
+                                             /*excludePatrols*/ false,
                                              /*countedOut*/ nullptr, &w);
         return w;
     }
@@ -1152,12 +1152,12 @@ TEST(DungeonClearEliteWeightTest, FiveElitesIsTheLeeroyBoundary)
 
 // --- Patrol-wait: EstimateAggroCount lone-patroller exclusion --------------
 
-// Helper: the reduced pass (lone patrollers excluded).
+// Helper: the reduced pass (patrols excluded).
 static unsigned CountReduced(std::vector<DungeonClearMath::DynPullMob> const& m,
                              std::size_t t)
 {
     return DungeonClearMath::EstimateAggroCount(m, t, kSpread, kAssistR, kZTol,
-                                                /*excludeLonePatrollers*/ true);
+                                                /*excludePatrols*/ true);
 }
 
 // A lone patroller (packId 0) that tips a clean 2-mob Leeroy over the ceiling is
@@ -1179,11 +1179,11 @@ TEST(DungeonClearPatrolWaitTest, LonePatrollerDropsInReducedPass)
     EXPECT_EQ(CountReduced(mobs, 0), 5u);
 }
 
-// A patroller that shares an atomic pack (packId != 0) is NOT droppable — you
-// cannot wait out half a formation — so the reduced pass still counts it.
-TEST(DungeonClearPatrolWaitTest, FormationPatrollerStaysInReducedPass)
+// A patrolling formation (a patroller and the pack linked to it) walks as one,
+// so the reduced pass drops the whole formation: it can be waited out.
+TEST(DungeonClearPatrolWaitTest, PatrollingFormationDropsInReducedPass)
 {
-    // Mob 5 is a patroller but linked (packId 7) to mob 4; both come as a unit.
+    // Mob 5 is a patroller linked (packId 7) to mob 4; both walk as a unit.
     std::vector<DungeonClearMath::DynPullMob> mobs = {
         {0.0f, 0.0f, 0.0f, false, 0u, kReach},                 // 0 target
         {3.0f, 0.0f, 0.0f, true,  0u, kReach},                 // 1
@@ -1193,7 +1193,35 @@ TEST(DungeonClearPatrolWaitTest, FormationPatrollerStaysInReducedPass)
         {15.0f, 0.0f, 0.0f, true, 7u, kReach, /*patrol*/ true} // 5 patroller, linked
     };
     EXPECT_EQ(Count(mobs, 0), 6u);
-    EXPECT_EQ(CountReduced(mobs, 0), 6u);  // linked patroller survives
+    EXPECT_EQ(CountReduced(mobs, 0), 4u);  // the formation walks on
+}
+
+// The target's own pack is the patrol, passing a static pack (Ramparts heroic: a
+// Ravener and two Warhounds by a Destroyer and two Darkcasters). The full pass
+// counts both packs; the reduced pass only the patrol, as once it walks clear.
+TEST(DungeonClearPatrolWaitTest, PatrollingTargetCountsOnlyItsPack)
+{
+    std::vector<DungeonClearMath::DynPullMob> mobs = {
+        {0.0f, 0.0f, 0.0f, true, 3u, kReach, /*patrol*/ true}, // 0 target, patrol leader
+        {2.0f, 0.0f, 0.0f, true, 3u, kReach},                  // 1 its packmate
+        {4.0f, 0.0f, 0.0f, true, 3u, kReach},                  // 2 its packmate
+        {8.0f, 0.0f, 0.0f, true, 9u, kReach},                  // 3 static pack
+        {10.0f, 0.0f, 0.0f, true, 9u, kReach},                 // 4
+        {12.0f, 0.0f, 0.0f, true, 9u, kReach},                 // 5
+    };
+    EXPECT_EQ(Count(mobs, 0), 6u);
+    EXPECT_EQ(CountReduced(mobs, 0), 3u);
+}
+
+// A static target with no patrol anywhere: the reduced pass changes nothing.
+TEST(DungeonClearPatrolWaitTest, NoPatrolReducedEqualsFull)
+{
+    std::vector<DungeonClearMath::DynPullMob> mobs = {
+        {0.0f, 0.0f, 0.0f, false, 4u, kReach},  // 0 target
+        {2.0f, 0.0f, 0.0f, true,  4u, kReach},  // 1
+        {8.0f, 0.0f, 0.0f, true,  0u, kReach},  // 2 neighbour
+    };
+    EXPECT_EQ(CountReduced(mobs, 0), Count(mobs, 0));
 }
 
 // --- ShouldMusterForScriptedStage (the scripted-stage muster latch) -------
@@ -1298,12 +1326,21 @@ TEST(DungeonClearPatrolGateTest, NotContendedProceeds)
     EXPECT_EQ(since, 0u);
 }
 
-// Reduced ALSO over the ceiling: the patrol isn't the sole cause -> proceed
-// (commit Advanced), don't wait.
-TEST(DungeonClearPatrolGateTest, ReducedStillOverIsNotPatrolContended)
+// Reduced ALSO over the ceiling but smaller than full: the pull stays a drag, but
+// the patrol makes it heavier -> wait, then drag the smaller pull.
+TEST(DungeonClearPatrolGateTest, PatrolInflatedDragWaits)
 {
     std::uint32_t since = 0u;
-    EXPECT_FALSE(ShouldWaitForPatrol(8u, 6u, 5u, since, 1000u, 8000u, since));
+    EXPECT_TRUE(ShouldWaitForPatrol(8u, 6u, 5u, since, 1000u, 8000u, since));
+    EXPECT_EQ(since, 1000u);
+}
+
+// Over the ceiling with or without the patrol, and no heavier for it: nothing to
+// wait out -> proceed (commit Advanced).
+TEST(DungeonClearPatrolGateTest, PatrolAddsNothingProceeds)
+{
+    std::uint32_t since = 0u;
+    EXPECT_FALSE(ShouldWaitForPatrol(8u, 8u, 5u, since, 1000u, 8000u, since));
     EXPECT_EQ(since, 0u);
 }
 
