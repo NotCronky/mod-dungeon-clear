@@ -169,8 +169,8 @@ namespace
     //   - Key items (Scarlet Key, Key to the City) and lockpicking open their
     //     locks exactly as a player would — EXCEPT for the doors on
     //     DcEventDoorRegistry::IsKeyExempt (the SM Armory/Cathedral wing gates
-    //     plus every keyed door in Scholomance, Stratholme and Dire Maul
-    //     North), where the key requirement is deliberately waived so a keyless
+    //     plus every keyed door in Scholomance, Stratholme and Dire Maul),
+    //     where the key requirement is deliberately waived so a keyless
     //     tank can still clear the dungeon.
     //   - GO_FLAG_LOCKED suppresses the bare-hands slots: flagged gates demand
     //     the real key/skill (Strat's King's Square Gate carries a Quick Open

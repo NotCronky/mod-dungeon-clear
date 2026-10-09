@@ -182,6 +182,11 @@ TEST(DcDoorPolicyTest, ScholomanceStratholmeAndDireMaulNorthKeyedDoorsAreExempt)
     EXPECT_TRUE(DcEventDoorRegistry::IsKeyExempt(177217));   // Gordok Inner Door
     EXPECT_TRUE(DcEventDoorRegistry::IsKeyExempt(179549));   // DM North Crescent Key door
 
+    // Dire Maul West: the two Crescent Key doors (also map-429 events 9/10, which
+    // only fire within 25yd — tr-20261009-235534-1 auto-paused 38yd short).
+    EXPECT_TRUE(DcEventDoorRegistry::IsKeyExempt(177221));   // DM West door after Tendris
+    EXPECT_TRUE(DcEventDoorRegistry::IsKeyExempt(179550));   // DM West door before Immol'thar
+
     // Still scoped to DOORS in those dungeons, and still not a lock-level rule:
     // the script-driven gates and the keyed non-door objects stay untouched.
     EXPECT_FALSE(DcEventDoorRegistry::IsKeyExempt(175570));  // Scholo Kirtonos gate (script)

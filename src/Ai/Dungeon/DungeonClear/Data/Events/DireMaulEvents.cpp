@@ -264,13 +264,14 @@ void RegisterDireMaulEvents(std::vector<DungeonEvent>& out)
     // gate the West path. Both are GAMEOBJECT_TYPE_DOOR with lock 1562 (the
     // Crescent Key, item 18249) — but server-side GameObject::Use() on a DOOR
     // toggles it open with NO lock/key check (the key is a client-only gate), so
-    // a bot UseGO opens them without a key, exactly like the Gordok doors. The
-    // stock DC door machinery refuses them (DcDoorPolicy suppresses bare-hands on
-    // GO_FLAG_LOCKED), so this CONDITIONAL event is the only path — and being
-    // on-path it must be conditional to preempt the door-blocked stall (rel 31 >
-    // 22; an anchored objective can't fire because the shut door truncates the
-    // route short of it). Same shape as the Gordok doors. (The third lock-1562
-    // door, 179549 at the entrance, is off the West boss path and is ignored.)
+    // a bot UseGO opens them without a key, exactly like the Gordok doors. Being
+    // on-path the event must be conditional to preempt the door-blocked stall
+    // (rel 31 > 22; an anchored objective can't fire because the shut door
+    // truncates the route short of it). Same shape as the Gordok doors, and like
+    // them both doors are also DcEventDoorRegistry::IsKeyExempt, so a tank parked
+    // outside the event's 25yd scan opens the door itself rather than
+    // auto-pausing. (The third lock-1562 door, 179549, is off the West boss path
+    // and opens only through that exemption.)
     out.push_back(EventBuilder(429, 9, "Open the Crescent Key Door (lower)")
                       .Conditional(&CrescentDoorLower)
                       .UseGO(/*after Tendris*/ 177221, /*searchRadius*/ 25.0f)
