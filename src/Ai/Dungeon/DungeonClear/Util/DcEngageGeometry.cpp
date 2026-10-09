@@ -585,6 +585,52 @@ bool DcEngageGeometry::EnRouteSweepApplies(Player* bot)
     return RouteSweepRegistry::SweepsRoute(map->GetId());
 }
 
+std::optional<Position> DcEngageGeometry::HoldBackoffPoint(Player* bot, float buffer)
+{
+    if (!bot)
+        return std::nullopt;
+
+    constexpr float kMaxAggroReach = 50.0f;     // as BystanderSpheres
+    std::list<Creature*> nearby;
+    Acore::AnyUnitInObjectRangeCheck check(bot, kMaxAggroReach);
+    Acore::CreatureListSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(bot, nearby, check);
+    Cell::VisitObjects(bot, searcher, kMaxAggroReach);
+
+    Creature* worst = nullptr;
+    float worstDepth = 0.0f;
+    for (Creature* c : nearby)
+    {
+        if (!c || !c->IsAlive() || c->IsInCombat() || !bot->IsHostileTo(c) || c->IsCritter() ||
+            c->IsTotem() || IsDisplayedDead(c))
+            continue;
+        if (std::fabs(c->GetPositionZ() - bot->GetPositionZ()) > DC_Z_LEVEL_TOLERANCE)
+            continue;
+        float const depth = AggroReach(bot, c, buffer) - bot->GetExactDist2d(c);
+        if (depth > worstDepth)
+        {
+            worstDepth = depth;
+            worst = c;
+        }
+    }
+    if (!worst)
+        return std::nullopt;
+
+    float const dx = bot->GetPositionX() - worst->GetPositionX();
+    float const dy = bot->GetPositionY() - worst->GetPositionY();
+    float const len = std::sqrt(dx * dx + dy * dy);
+    if (len < 0.1f)
+        return std::nullopt;
+    float const step = worstDepth + 1.0f;
+    float x = bot->GetPositionX() + dx / len * step;
+    float y = bot->GetPositionY() + dy / len * step;
+    float z = bot->GetPositionZ();
+    bot->UpdateAllowedPositionZ(x, y, z);
+    Position const p(x, y, z, bot->GetOrientation());
+    if (std::fabs(z - bot->GetPositionZ()) > DC_Z_LEVEL_TOLERANCE || !IsNavReachable(bot, p))
+        return std::nullopt;
+    return p;
+}
+
 bool DcEngageGeometry::TargetInsideBystanderPack(Player* bot, Unit* target)
 {
     if (!bot || !target)

@@ -951,7 +951,12 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         {
             float const commitRange =
                 DcEngageGeometry::PullCommitRange(bot, target, DC_PULL_START_RANGE);
-            obs.atCommitRange = bot->GetExactDist2d(target) <= commitRange;
+            // A hold already standing keeps counting while the tank steps back out
+            // of a packmate's aggro reach (DcPullActions, HoldBackoffPoint): read as
+            // "approaching" again it would reset the wait clock and walk back in.
+            float const holdSlack = sameTarget && pull.decision == DcPullDecisionCode::PatrolHold
+                ? DC_PATROL_HOLD_SLACK : 0.0f;
+            obs.atCommitRange = bot->GetExactDist2d(target) <= commitRange + holdSlack;
             if (obs.atCommitRange)
             {
                 uint32 const waitMs =

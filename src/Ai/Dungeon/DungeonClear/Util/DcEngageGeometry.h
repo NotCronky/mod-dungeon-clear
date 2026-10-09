@@ -355,6 +355,16 @@ public:
     // when neither owns the difficulty.
     static bool TargetInsideBystanderPack(Player* bot, Unit* target);
 
+    // Where to step back to while the tank HOLDS short of a pack (the patrol wait),
+    // or nullopt when the spot is safe or no reachable step-back exists. The commit
+    // range is measured to the pull target alone, so a packmate standing nearer the
+    // tank (or the patrol that joins it) can sit inside its own aggro reach of the
+    // hold spot: harmless for a commit that fires at once, a face-pull of the whole
+    // pack plus patrol over an 8-18s hold (Ramparts heroic, the 72s' wider aggro).
+    // Every idle hostile counts here, the target's own pack included; the point is
+    // straight away from the deepest violator, `buffer` yards outside its reach.
+    static std::optional<Position> HoldBackoffPoint(Player* bot, float buffer);
+
     // Is the en-route pack SWEEP in force for this bot? A non-heroic dungeon on
     // the RouteSweepRegistry allow-list — see that header for why the scope is a
     // per-map table rather than a difficulty or a config key, and
