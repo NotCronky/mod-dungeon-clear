@@ -67,6 +67,11 @@ namespace DcTestRunRecord
         std::uint64_t damage = 0;
         std::uint64_t healing = 0;
         std::uint32_t activeS = 0;
+        // Auto-attacks over the same window: melee swings, Auto Shot / wand
+        // shots, and the part of `damage` they dealt (the member's own).
+        std::uint32_t autoSwings = 0;
+        std::uint32_t autoShots = 0;
+        std::uint64_t autoDamage = 0;
     };
 
     struct StatusEntry
@@ -184,7 +189,10 @@ namespace DcTestRunRecord
         //     killedBySpellName / killingBlow — the real killing hit, where
         //     `opponent` is only what the party was engaged with.
         // 17: added deaths[].x / y / z — where they died.
-        std::uint32_t schema = 17;
+        // 18: added comp[].autoSwings / autoShots / autoDamage — melee swings,
+        //     Auto Shot and wand shots, and the damage they dealt (part of
+        //     `damage`); the spell lines can't show auto-attacks.
+        std::uint32_t schema = 18;
         std::string runId;
         std::string planId;       // owning `.dc test plan`, "" for ad-hoc runs
         std::string dungeon;      // registry token

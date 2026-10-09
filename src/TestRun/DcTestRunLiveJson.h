@@ -60,6 +60,8 @@ namespace DcTestRunLive
         std::uint64_t damage = 0;
         std::uint64_t healing = 0;
         std::uint32_t activeS = 0;
+        // The part of `damage` from auto-attacks (melee swings, Auto Shot, wand).
+        std::uint64_t autoDamage = 0;
     };
 
     // One pool entry of a pool plan, with its own tallies so far.

@@ -338,9 +338,10 @@ TEST(DcTestRunLiveJsonTest, BotMeterIsEmitted)
     mage.damage = 123456;
     mage.healing = 0;
     mage.activeS = 300;
+    mage.autoDamage = 2345;
     s.bots.push_back(mage);
 
     std::string const json = Build(1700000000ull, {s});
 
-    EXPECT_NE(json.find("\"dmg\":123456,\"heal\":0,\"act\":300}"), std::string::npos);
+    EXPECT_NE(json.find("\"dmg\":123456,\"heal\":0,\"act\":300,\"autoDmg\":2345}"), std::string::npos);
 }

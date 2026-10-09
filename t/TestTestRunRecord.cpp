@@ -182,7 +182,7 @@ TEST(DcTestRunRecordTest, BossRosterSerializesInProgressionOrder)
               std::string::npos);
 }
 
-TEST(DcTestRunRecordTest, SchemaIsSeventeen)
+TEST(DcTestRunRecordTest, SchemaIsEighteen)
 {
     // 12: added combatHolders[].trigger, and with it a change of meaning in the
     // sibling `legitimate` field — a trigger creature now sinks the verdict.
@@ -192,8 +192,23 @@ TEST(DcTestRunRecordTest, SchemaIsSeventeen)
     // 15: added comp[].damage / healing / activeS (the damage and healing meter).
     // 16: added deaths[].killedBy / killedByEntry / killedBySpell / killedBySpellName / killingBlow.
     // 17: added deaths[].x / y / z.
-    EXPECT_NE(ToJsonl(SampleRecord()).find("\"schema\":17"), std::string::npos);
+    // 18: added comp[].autoSwings / autoShots / autoDamage.
+    EXPECT_NE(ToJsonl(SampleRecord()).find("\"schema\":18"), std::string::npos);
     EXPECT_NE(ToJsonl(SampleRecord()).find("\"size\":"), std::string::npos);
+}
+
+// Auto-attacks ride after the meter: the spell lines can't show swings or shots.
+TEST(DcTestRunRecordTest, CompCarriesAutoAttacks)
+{
+    DcTestRunRecord::Record r = SampleRecord();
+    r.comp[0].damage = 5000;
+    r.comp[0].activeS = 60;
+    r.comp[0].autoSwings = 40;
+    r.comp[0].autoShots = 0;
+    r.comp[0].autoDamage = 3200;
+
+    EXPECT_NE(ToJsonl(r).find("\"activeS\":60,\"autoSwings\":40,\"autoShots\":0,\"autoDamage\":3200}"),
+              std::string::npos);
 }
 
 // A full-dungeon run still carries the scenario block, empty — readers key on

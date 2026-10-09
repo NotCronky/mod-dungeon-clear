@@ -158,7 +158,8 @@ namespace DcTestRunRecord
                 AppendEscaped(s, c.unusedSpells[j]);
             }
             s << "],\"damage\":" << c.damage << ",\"healing\":" << c.healing << ",\"activeS\":" << c.activeS
-              << "}";
+              << ",\"autoSwings\":" << c.autoSwings << ",\"autoShots\":" << c.autoShots
+              << ",\"autoDamage\":" << c.autoDamage << "}";
         }
         s << "],\"startedAtMs\":" << rec.startedAtMs
           << ",\"endedAtMs\":" << rec.endedAtMs

@@ -596,6 +596,7 @@ DcTestRunLive::RunSnapshot DcTestRunJob::Snapshot() const
         bp.damage = meter.damage;
         bp.healing = meter.healing;
         bp.activeS = meter.activeS;
+        bp.autoDamage = meter.autoDamage;
         s.bots.push_back(std::move(bp));
     }
 
@@ -3059,6 +3060,9 @@ void DcTestRunJob::Teardown()
             entry.damage = meter.damage;
             entry.healing = meter.healing;
             entry.activeS = meter.activeS;
+            entry.autoSwings = meter.swings;
+            entry.autoShots = meter.shots;
+            entry.autoDamage = meter.autoDamage;
         }
         _record.stallAtEnd = _record.diag.stallReason;
         _record.phaseAtEnd = _record.diag.phase;
