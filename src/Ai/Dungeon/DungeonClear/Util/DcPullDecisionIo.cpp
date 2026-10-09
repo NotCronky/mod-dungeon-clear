@@ -65,6 +65,7 @@ namespace DcPullDecisionIo
             .Add("patrolWaitEnabled", o.patrolWaitEnabled)
             .Add("atCommitRange", o.atCommitRange)
             .Add("patrolContended", o.patrolContended)
+            .Add("patrolLeeroyable", o.patrolLeeroyable)
             .Add("patrolWaitExpired", o.patrolWaitExpired)
             .Add("forced", o.forced)
             .Str();
@@ -97,6 +98,7 @@ namespace DcPullDecisionIo
         o.patrolWaitEnabled   = DcDecisionJson::GetB(m, "patrolWaitEnabled", o.patrolWaitEnabled);
         o.atCommitRange       = DcDecisionJson::GetB(m, "atCommitRange", o.atCommitRange);
         o.patrolContended     = DcDecisionJson::GetB(m, "patrolContended", o.patrolContended);
+        o.patrolLeeroyable    = DcDecisionJson::GetB(m, "patrolLeeroyable", o.patrolLeeroyable);
         o.patrolWaitExpired   = DcDecisionJson::GetB(m, "patrolWaitExpired", o.patrolWaitExpired);
         o.forced              = DcDecisionJson::GetB(m, "forced", o.forced);
         out.obs = o;

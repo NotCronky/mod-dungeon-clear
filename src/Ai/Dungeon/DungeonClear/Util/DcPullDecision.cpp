@@ -42,11 +42,12 @@ namespace DcPullDecision
 
         // 4. Resolve a fresh classification into a verdict, layering the patrol-wait
         //    gate on top of the plain Leeroy/Advanced decision. Patrol-wait fires
-        //    only when ADVANCED is the verdict AND the feature is on: when the ONLY
-        //    reason a pack reads ADVANCED is a lone patroller in chain range
-        //    (`patrolContended`), a human holds at commit range and waits it out,
-        //    or — while still approaching — walks in as a provisional Leeroy rather
-        //    than locking the heavier maneuver 35yd out.
+        //    only when ADVANCED is the verdict AND the feature is on: when a patrol
+        //    makes the pull heavier than it will be once the patrol walks on
+        //    (`patrolContended`), a human holds at commit range and waits it out.
+        //    While still approaching it walks in as a provisional Leeroy when the
+        //    pack is a Leeroy without the patrol, rather than locking the heavier
+        //    maneuver 35yd out; otherwise it approaches under the hold.
         if (o.advanced && o.patrolWaitEnabled)
         {
             if (o.atCommitRange)
@@ -65,7 +66,14 @@ namespace DcPullDecision
                 // the force exists to stop. Garr's south Lava Annihilator, forced
                 // by the room's pullOutRadius, was contended by a patrolling Core
                 // Hound, walked in as Leeroy and pulled Garr (tr-20261007-201839-1).
-                return PullVerdict::ApproachAsLeeroy;
+                if (o.patrolLeeroyable)
+                    return PullVerdict::ApproachAsLeeroy;
+                // Still a drag once the patrol has passed (a patrolling pack over
+                // the ceiling on its own: heroic Ramparts' Ravener and Warhounds):
+                // no Leeroy walk-in, whose tag can land before commit range. The
+                // hold stands the engages down while the tank closes to commit
+                // range, where the wait clock starts.
+                return PullVerdict::PatrolWaitHold;
             }
         }
 

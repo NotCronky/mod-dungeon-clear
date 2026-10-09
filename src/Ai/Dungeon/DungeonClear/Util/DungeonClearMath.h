@@ -202,7 +202,7 @@ namespace DungeonClearMath
     // WAYPOINT_MOTION_TYPE). A human tank waits a patrol out instead of committing
     // the heavier pull for a pack that would be a clean small Leeroy moments later;
     // the patrol-wait gate re-runs the estimate with lone patrollers excluded (see
-    // `excludeLonePatrollers` on EstimateAggroCount) to detect that case. Random
+    // `excludePatrols` on EstimateAggroCount) to detect that case. Random
     // wanderers are deliberately NOT patrollers — their return is unpredictable.
     // `elite` marks an elite-tier body (Creature::isElite(): elite / rare-elite /
     // worldboss rank). It tunes only the WEIGHT a counted mob adds to the pull-
@@ -240,11 +240,12 @@ namespace DungeonClearMath
     // floor gaps exceed it, so a mob a ramp above/below never counts. Separated
     // from the game-state resolution in DcPullPlanner::ClassifyPullAdvanced so
     // the logic is unit-testable.
-    // `excludeLonePatrollers` (patrol-wait gate): when true, a mob marked
-    // `patroller` that is NOT part of an atomic pack (`packId == 0`) is treated as
-    // not `chainEligible` — it neither seeds proximity nor assists nor is assisted
-    // — modelling "if we let this patrol pass". Formation/linked patrollers
-    // (`packId != 0`) are unaffected: you cannot wait out half a formation.
+    // `excludePatrols` (patrol-wait gate): when true, models "if we let the patrol
+    // walk on". A patrol is a mob marked `patroller` with its whole atomic pack (a
+    // formation walks with its leader). Another pack's patrol is treated as not
+    // `chainEligible` — it neither seeds proximity nor assists nor is assisted.
+    // When the target's own pack is a patrol, only that pack counts: the pull once
+    // it has walked clear of the others.
     // `countedOut` (optional) receives the indices of every mob the estimate
     // counted, for diagnostic logging at the call site.
     // `weightThirdsOut` (optional) receives the counted set's PULL WEIGHT, in
@@ -255,7 +256,7 @@ namespace DungeonClearMath
     std::uint32_t EstimateAggroCount(std::vector<DynPullMob> const& mobs,
                                      std::size_t targetIdx, float combatSpread,
                                      float assistRadius, float zTolerance,
-                                     bool excludeLonePatrollers = false,
+                                     bool excludePatrols = false,
                                      std::vector<std::size_t>* countedOut = nullptr,
                                      std::uint32_t* weightThirdsOut = nullptr);
 
@@ -433,12 +434,12 @@ namespace DungeonClearMath
     bool ShouldRollInForLeeroy(std::uint32_t decision, bool targetAlive,
                                float tankToTarget2d, float commitRange, float lead);
 
-    // Patrol-wait gate (pure). A pull is "patrol-contended" when the ONLY thing
-    // pushing the aggro estimate over the Leeroy ceiling is one or more lone
-    // patrollers: `fullCount > ceiling` but `reducedCount <= ceiling` (the reduced
-    // pass excluded them — see EstimateAggroCount's excludeLonePatrollers). For
-    // such a pack a human waits the patrol out rather than committing the heavier
-    // Advanced maneuver. Returns true to KEEP WAITING (hold the pull), false to
+    // Patrol-wait gate (pure). A pull is "patrol-contended" when it is over the
+    // Leeroy ceiling and a patrol makes it bigger than it will be once the patrol
+    // walks on: `fullCount > ceiling` and `fullCount > reducedCount` (the reduced
+    // pass leaves the patrols out — see EstimateAggroCount's excludePatrols). For
+    // such a pull a human waits the patrol out: it then Leeroys a pack that fits
+    // the ceiling, or drags a smaller one. Returns true to KEEP WAITING (hold the pull), false to
     // proceed (commit the standing verdict). Contended: arm/keep the `waitSince`
     // latch and wait until `waitMs` has elapsed, then proceed with the heavy
     // verdict (don't stall the run for a stationary/slow patrol) — the latch stays

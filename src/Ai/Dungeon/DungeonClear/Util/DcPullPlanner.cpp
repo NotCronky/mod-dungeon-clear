@@ -519,7 +519,7 @@ bool DcPullPlanner::ClassifyPullAdvanced(PlayerbotAI* botAI, Unit* target,
     uint32 weightThirds = 0;
     uint32 const count = DungeonClearMath::EstimateAggroCount(
         mobs, targetIdx, combatSpread, assistRadius, DC_Z_LEVEL_TOLERANCE,
-        /*excludeLonePatrollers*/ false, &counted, &weightThirds);
+        /*excludePatrols*/ false, &counted, &weightThirds);
     // The verdict weighs the counted set, not its raw body count: an elite is a
     // full unit, a normal a third. The ceiling (MaxLeeroyMobs, set in elites) is
     // scaled to the same thirds unit, so a room of weak normal trash no longer
@@ -527,27 +527,27 @@ bool DcPullPlanner::ClassifyPullAdvanced(PlayerbotAI* botAI, Unit* target,
     uint32 const ceilingThirds = maxLeeroy * 3;
     bool const advanced = weightThirds > ceilingThirds;
 
-    // Patrol-wait detail (only when the caller asks for it AND a lone patroller is
+    // Patrol-wait detail (only when the caller asks for it AND a patroller is
     // actually present, so the second O(n^2) pass is skipped otherwise): re-run the
-    // estimate with lone patrollers excluded. If the full weight is over the ceiling
-    // but the reduced is not, a patrol is the sole reason for the heavy verdict and
-    // the governor can hold for it. Pure math on data already gathered. Carried in
-    // the same thirds unit as the verdict above so the contended condition stays
-    // consistent with it.
+    // estimate as if the patrols had walked on. If the full weight is over the
+    // ceiling and over the reduced one, a patrol is making the pull heavier than it
+    // will be and the governor can hold for it. Pure math on data already gathered.
+    // Carried in the same thirds unit as the verdict above so the contended
+    // condition stays consistent with it.
     if (out)
     {
-        bool lonePatroller = false;
+        bool patroller = false;
         for (DungeonClearMath::DynPullMob const& m : mobs)
-            if (m.patroller && m.packId == 0)
+            if (m.patroller)
             {
-                lonePatroller = true;
+                patroller = true;
                 break;
             }
         uint32 reducedThirds = weightThirds;
-        if (lonePatroller)
+        if (patroller)
             DungeonClearMath::EstimateAggroCount(
                 mobs, targetIdx, combatSpread, assistRadius, DC_Z_LEVEL_TOLERANCE,
-                /*excludeLonePatrollers*/ true, nullptr, &reducedThirds);
+                /*excludePatrols*/ true, nullptr, &reducedThirds);
         out->fullCount = weightThirds;
         out->reducedCount = reducedThirds;
         out->ceiling = ceilingThirds;
@@ -906,9 +906,10 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
 
     // Resolve a fresh classification into a verdict, layering the patrol-wait gate
     // on top of the plain Leeroy/Advanced decision. Patrol-wait (Dynamic only):
-    // when the ONLY reason a pack reads ADVANCED is a lone patroller in chain range
-    // (full over ceiling, reduced under), a human holds at commit range and waits
-    // the patrol out rather than committing the heavier maneuver — but only once
+    // when a pack reads ADVANCED and a patrol in chain range (or the target's own
+    // patrolling pack passing others) makes it heavier than it will be once the
+    // patrol walks on (full over ceiling and over reduced), a human holds at commit
+    // range and waits the patrol out rather than committing the heavier maneuver — but only once
     // the tank has actually closed to commit range, so it approaches via the normal
     // walk-in and holds at the decision point, not 35yd out. While still
     // approaching such a pack it stays provisional LEEROY (never locking ADVANCED).
@@ -942,7 +943,8 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         obs.advanced = advanced;
         obs.patrolWaitEnabled = patrolWaitEnabled;
         obs.patrolContended =
-            cls.fullCount > cls.ceiling && cls.reducedCount <= cls.ceiling;
+            cls.fullCount > cls.ceiling && cls.fullCount > cls.reducedCount;
+        obs.patrolLeeroyable = cls.reducedCount <= cls.ceiling;
         obs.forced = forceAdv;
 
         // Only AT commit range do we run (and latch) the patrol-wait clock, exactly
@@ -973,6 +975,10 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         switch (v)
         {
             case DcPullDecision::PullVerdict::PatrolWaitHold:
+                // Approaching under the hold (a pack that stays a drag without the
+                // patrol): the wait clock only runs from commit range.
+                if (!obs.atCommitRange)
+                    pull.patrolWaitSince = 0;
                 apply(false, DcPullDecisionCode::PatrolHold);  // hold at commit range; pull mode off, no tag
                 DC_PULL_INFO("[DC:{}] dynamic: pack {} patrol-contended (full {} > "
                              "ceiling {}, reduced {}) -> WAITING for patrol",

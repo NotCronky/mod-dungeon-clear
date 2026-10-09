@@ -64,7 +64,8 @@ namespace DcPullDecision
         bool advanced          = false;  // ClassifyPullAdvanced verdict
         bool patrolWaitEnabled = false;  // DcSettings PullPatrolWait
         bool atCommitRange     = false;  // tank within PullCommitRange of the pack
-        bool patrolContended   = false;  // fullCount > ceiling && reducedCount <= ceiling
+        bool patrolContended   = false;  // fullCount > ceiling && fullCount > reducedCount
+        bool patrolLeeroyable  = true;   // reducedCount <= ceiling: a Leeroy once the patrol is gone
         bool patrolWaitExpired = false;  // at commit: ShouldWaitForPatrol() said proceed
         bool forced            = false;  // Advanced by a hard rule (room pull-out, bystander
                                          // pack, PullForceAdvanced), not by the estimate

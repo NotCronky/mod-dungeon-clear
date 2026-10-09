@@ -146,6 +146,19 @@ TEST(DcPullDecision, PatrolContendedApproachingWalksInAsLeeroy)
     EXPECT_EQ(DecidePull(o), PullVerdict::ApproachAsLeeroy);
 }
 
+TEST(DcPullDecision, PatrolContendedDragApproachesUnderHold)
+{
+    // Still a drag once the patrol has gone (reduced over the ceiling): no
+    // provisional Leeroy walk-in, approach under the hold instead.
+    PullObservation o = Base();
+    o.advanced = true;
+    o.patrolWaitEnabled = true;
+    o.atCommitRange = false;
+    o.patrolContended = true;
+    o.patrolLeeroyable = false;
+    EXPECT_EQ(DecidePull(o), PullVerdict::PatrolWaitHold);
+}
+
 TEST(DcPullDecision, ForcedDragNeverWalksInAsLeeroy)
 {
     // A pull forced Advanced (a room's pullOutRadius) that a patrol makes look
