@@ -157,6 +157,12 @@ constexpr float DC_CORRIDOR_WIDTH = 18.0f;
 // run-in's overshoot dead band and every pull after the first whiffs. The pull
 // trigger and the pull action must agree on when a pull starts.
 constexpr float DC_PULL_START_RANGE = 26.0f;
+// Yards a tank holding for a patrol keeps outside every idle pack's aggro reach
+// (DcEngageGeometry::HoldBackoffPoint): the hold lasts seconds, not a tick.
+constexpr float DC_PATROL_HOLD_BUFFER = 3.0f;
+// Yards past commit range a standing patrol hold still counts as "at commit range"
+// (DcPullPlanner): room for the step-back above without restarting the approach.
+constexpr float DC_PATROL_HOLD_SLACK = 15.0f;
 
 // How long the route-driving rungs (idle/advance and at-boss) stand down for a
 // pull maneuver that has left phase Idle.

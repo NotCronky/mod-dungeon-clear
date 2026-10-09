@@ -816,6 +816,22 @@ bool DungeonClearPullAction::Execute(Event /*event*/)
                 // Advance. Stop::Soft is not escort-aware and lets the tank coast
                 // on into the pack it is meant to be waiting out; Stop::Hold kills
                 // the glide (same reason the commit branch below uses Hold).
+                //
+                // The hold spot is commit range from the TARGET; a nearer packmate
+                // can have it inside its own aggro reach, and a held tank face-pulls
+                // the pack and the patrol it was waiting out. Step back clear first.
+                if (std::optional<Position> const back =
+                        DcEngageGeometry::HoldBackoffPoint(bot, DC_PATROL_HOLD_BUFFER))
+                {
+                    DC_PULL_INFO("[DC:{}] pull idle: patrol-hold spot inside a pack's aggro "
+                                 "reach -> stepping back {:.1f}yd", bot->GetName(),
+                                 bot->GetExactDist2d(&*back));
+                    DcMoveTo(bot->GetMapId(), back->GetPositionX(), back->GetPositionY(),
+                             back->GetPositionZ(), /*idle*/ false, /*react*/ false,
+                             /*normal_only*/ false, /*exact_waypoint*/ false,
+                             MovementPriority::MOVEMENT_COMBAT);
+                    return true;
+                }
                 DcMovement::StopBot(bot, DcMovement::Stop::Hold);
                 DC_PULL_TRACE("[DC:{}] pull idle: holding for patrol ({:.1f}yd to pack)",
                               bot->GetName(), bot->GetExactDist2d(trash));
