@@ -70,10 +70,11 @@ namespace DcPullDecision
                     return PullVerdict::ApproachAsLeeroy;
                 // Still a drag once the patrol has passed (a patrolling pack over
                 // the ceiling on its own: heroic Ramparts' Ravener and Warhounds):
-                // no Leeroy walk-in, whose tag can land before commit range. The
-                // hold stands the engages down while the tank closes to commit
-                // range, where the wait clock starts.
-                return PullVerdict::PatrolWaitHold;
+                // no Leeroy walk-in, whose tag can land before commit range. Hold
+                // instead; the wait clock runs from here, and once it has run out
+                // the drag goes ahead.
+                if (!o.patrolWaitExpired)
+                    return PullVerdict::PatrolWaitHold;
             }
         }
 

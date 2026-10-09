@@ -159,6 +159,20 @@ TEST(DcPullDecision, PatrolContendedDragApproachesUnderHold)
     EXPECT_EQ(DecidePull(o), PullVerdict::PatrolWaitHold);
 }
 
+TEST(DcPullDecision, PatrolContendedDragAwayFromCommitStopsHoldingWhenWaitExpires)
+{
+    // The hold away from commit range is bounded too: once the wait has run out
+    // the drag goes ahead (tr-20261009-032623-1 held 270s+ without this).
+    PullObservation o = Base();
+    o.advanced = true;
+    o.patrolWaitEnabled = true;
+    o.atCommitRange = false;
+    o.patrolContended = true;
+    o.patrolLeeroyable = false;
+    o.patrolWaitExpired = true;
+    EXPECT_EQ(DecidePull(o), PullVerdict::Advanced);
+}
+
 TEST(DcPullDecision, ForcedDragNeverWalksInAsLeeroy)
 {
     // A pull forced Advanced (a room's pullOutRadius) that a patrol makes look
