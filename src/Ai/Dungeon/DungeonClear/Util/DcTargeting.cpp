@@ -784,11 +784,22 @@ Creature* DcTargeting::PatrolBossPreclearTarget(Player* bot, AiObjectContext* ct
         }
     }
 
+    // A pack a pull gave up on (a tag that timed out) goes to the walk-in engage,
+    // and the pull trigger refuses it; offering it again stalls the pre-clear on
+    // it for good, since the at-boss rung holds and no walk-in comes
+    // (tr-20261010-022057-1). Move on to the next pack; Geddon's tag window waits
+    // out (PatrolBossTagMaxWaitSec) whatever is left near his loop.
+    ObjectGuid const abortTarget = ctx->GetValue<DcPullContext&>(DcKey::PullContext)->Get().abortTarget;
+    DcThreatEntry const* abortEntry = abortTarget.IsEmpty() ? nullptr : tm->FindByGuid(abortTarget);
+    uint32 const abortPack = abortEntry ? abortEntry->packId : 0;
+
     Creature* best = nullptr;
     float bestD = 0.0f;
     for (DcThreatEntry const& e : tm->Entries())
     {
         if (!e.alive || !e.loaded || e.inCombat || e.evading || e.boss || e.guid.IsEmpty())
+            continue;
+        if (e.guid == abortTarget || (abortPack && e.packId == abortPack))
             continue;
         bool inside = std::hypot(e.x - row->campX, e.y - row->campY) <= campR &&
                       std::fabs(e.z - row->campZ) <= band;
