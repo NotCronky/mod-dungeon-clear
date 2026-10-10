@@ -283,6 +283,10 @@ public:
     // boss does not patrol); the pull pipeline sizes and drags it like any pack,
     // so the patrol-boss hold times it around his loop.
     static Creature* PatrolBossPreclearTarget(Player* bot, AiObjectContext* ctx, Creature* boss);
+    // Whether `target` is trash pulled while the next boss is a pull-back boss
+    // (BossPullbackRegistry): the pre-clear around his camp and loop. Those packs
+    // are always dragged to the camp, never fought where they stand.
+    static bool IsPullbackPreclearTarget(Player* bot, AiObjectContext* ctx, Unit* target);
 
     // --- Room-wide-aggro pre-clear (RoomAggroRegistry) --------------------
 

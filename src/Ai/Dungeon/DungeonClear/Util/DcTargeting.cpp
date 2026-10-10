@@ -823,6 +823,15 @@ Creature* DcTargeting::PatrolBossPreclearTarget(Player* bot, AiObjectContext* ct
         ctx->GetValue<DcApproachState&>(DcKey::ApproachState)->Get().patrolTagWaitSince = 0;
     return best;
 }
+bool DcTargeting::IsPullbackPreclearTarget(Player* bot, AiObjectContext* ctx, Unit* target)
+{
+    if (!bot || !ctx || !target || !BossPullbackRegistry::HasRows(bot->GetMapId()))
+        return false;
+    std::optional<DungeonBossInfo> const next =
+        ctx->GetValue<std::optional<DungeonBossInfo>>(DcKey::NextDungeonBoss)->Get();
+    return next.has_value() && next->kind == DungeonAnchorKind::Boss && target->GetEntry() != next->entry &&
+           BossPullbackRegistry::Find(bot->GetMapId(), next->entry);
+}
 Unit* DcTargeting::FindPullTarget(PlayerbotAI* botAI, DungeonBossInfo const& next)
 {
     if (!botAI)
