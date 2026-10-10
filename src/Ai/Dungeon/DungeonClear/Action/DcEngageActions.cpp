@@ -1048,8 +1048,24 @@ bool DungeonClearEngageBossAction::Execute(Event event)
     // anchor and say why, rather than substituting the one behaviour that kills the
     // party. The pull re-arms on its own the next tick it can (the boss wanders
     // back, the abort latch clears at the Engage cleanup).
-    if (BossPullbackRegistry::Find(bot->GetMapId(), next->entry))
+    if (BossPullback const* pb = BossPullbackRegistry::Find(bot->GetMapId(), next->entry))
     {
+        // Off the anchor with no pull in flight (a pre-clear tag that timed out out
+        // in Geddon's room): walk back. Holding here kept the tank 28yd out, where
+        // the pre-clear and the pull no longer arm (both gate on the anchor) and
+        // Advance, which would walk it back, is outranked by this rung
+        // (tr-20261010-022057-1).
+        DcPullContext const& pullCtx = AI_VALUE(DcPullContext&, DcKey::PullContext);
+        if (pullCtx.phase == DcPullPhase::Idle && !pullCtx.bossPullback &&
+            !DcTickMemoAccess::AtBossEngage(bot, context, *next))
+        {
+            bool const moved = DcMoveTo(bot->GetMapId(), pb->campX, pb->campY, pb->campZ,
+                                        /*idle*/ false, /*react*/ false, /*normal_only*/ false,
+                                        /*exact_waypoint*/ false, MovementPriority::MOVEMENT_NORMAL);
+            SetPhase(context, "returning to the " + next->name + " camp");
+            return moved || bot->isMoving() || DcMoveDeferred(MovementPriority::MOVEMENT_NORMAL);
+        }
+
         DcMovement::StopBot(bot, DcMovement::Stop::Hold);
 
         // Both Advancing abort paths latch abortTarget to hand the pack to "the
