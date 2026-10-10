@@ -1022,11 +1022,19 @@ namespace DcEventDoorRegistry
             case 177219:  // Gordok Courtyard Door (lock 1563, Gordok Courtyard Key)
             case 177217:  // Gordok Inner Door (lock 1564, Gordok Inner Door Key)
             // The North wing's Crescent Key door, in the lower corridor among
-            // the Gordok Brute/Mastiff/Mage-Lord packs. Dire Maul's other two
-            // lock-1562 doors (177221, 179550) are West-wing and already open
-            // via map-429 events 9 and 10; this one has no event because it sits
-            // off the West boss path — the exemption is its only opener.
+            // the Gordok Brute/Mastiff/Mage-Lord packs. It has no event because
+            // it sits off the West boss path — the exemption is its only opener.
             case 179549:  // Dire Maul North — Door (lock 1562, Crescent Key)
+            // The West wing's two Crescent Key doors, the belt to map-429 events
+            // 9 and 10's braces (same as the Gordok doors). Those conditional
+            // events fire only within 25yd of the door, and without the
+            // exemption the door-blocked action auto-pauses a not-openable door
+            // from wherever it parks: tr-20261009-235534-1 paused 38yd short of
+            // 177221 the moment Tendris died, the event never in reach. Same
+            // template as 179549 (no AIName / ScriptName, untouched by
+            // instance_dire_maul).
+            case 177221:  // Dire Maul West — Door after Tendris (lock 1562)
+            case 179550:  // Dire Maul West — Door before Immol'thar (lock 1562)
 
             // --- Blackrock Depths (map 230) ------------------------------
             // Lock 680 — the Shadowforge Key (11000), or lockpicking 250. The
