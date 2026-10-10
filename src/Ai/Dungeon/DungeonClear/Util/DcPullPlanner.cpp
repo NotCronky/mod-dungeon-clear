@@ -60,6 +60,7 @@
 #include "ServerFacade.h"
 #include "Timer.h"
 #include "World.h"
+#include "Ai/Dungeon/DungeonClear/Data/DcNeverTargetRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h"
 #include "Ai/Dungeon/DungeonClear/Data/RoomAggroRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Util/ChunkedPathfinder.h"
@@ -1111,38 +1112,86 @@ std::optional<Position> DcPullPlanner::ComputeSafeCamp(PlayerbotAI* botAI, Unit*
     };
 
     // Resolve the other-pack hostiles once (alive, hostile, not the target, not a
-    // packmate). Same candidate set the pull / trash scans use.
-    GuidVector const& farTargets =
-        ctx->GetValue<GuidVector>(DcKey::FarTargets)->Get();
-    GuidVector const& possibleTargets =
-        ctx->GetValue<GuidVector>(DcKey::Stock::PossibleTargets)->Get();
-    GuidVector const& candidates = farTargets.empty() ? possibleTargets : farTargets;
-
-    std::vector<Unit*> others;
-    others.reserve(candidates.size());
-    for (ObjectGuid guid : candidates)
+    // packmate), as positions.
+    //
+    // Source: the threat map, over the same radius the tank's far-target scan
+    // covered. That scan dropped a mob while it evaded (damage-immune, so not a
+    // possible target) and anything outside what the tank had loaded, so a pack
+    // the camp had to clear could vanish for the tick the camp was placed. The
+    // map keeps both: an evading mob at its live position, a spawn in an unloaded
+    // grid at its spawn point (counted as hostile, as the member guard does: it
+    // can't be checked until it loads). A loaded unit passes the scan's own
+    // filters (possible attack target, not a never-target), evading excepted:
+    // invisible triggers and dormant scripted mobs stay out. ThreatMap = 0
+    // restores the scan.
+    std::vector<Position> others;
+    auto keepOther = [&](Unit* u) -> bool
     {
-        Unit* u = ObjectAccessor::GetUnit(*bot, guid);
         if (!u || !u->IsAlive() || u == target)
-            continue;
+            return false;
         if (!bot->IsHostileTo(u))
-            continue;
-        // On another floor (a pack on a ledge/ramp directly above or below): it
-        // can't aggro the camp fight, so it must not push the camp farther back.
-        // Same height gate the Dynamic decision and the corridor scans use, so
-        // placement and classification agree about what "near" means in 3D.
-        if (std::fabs(u->GetPositionZ() - target->GetPositionZ()) > DC_Z_LEVEL_TOLERANCE)
-            continue;
-        if (u->GetExactDist2d(target) <= kPackRadius)
-            continue;  // packmate — fought regardless of where camp sits
-        others.push_back(u);
+            return false;
+        // Scripted never-dies mobs: the far-target scan never listed them.
+        if (DcNeverTargetRegistry::IsNeverTarget(bot->GetMapId(), u->GetEntry()))
+            return false;
+        Creature* c = u->ToCreature();
+        return AttackersValue::IsPossibleTarget(u, bot) || (c && c->IsInEvadeMode());
+    };
+    // On another floor (a pack on a ledge/ramp directly above or below): it
+    // can't aggro the camp fight, so it must not push the camp farther back.
+    // Same height gate the Dynamic decision and the corridor scans use, so
+    // placement and classification agree about what "near" means in 3D. A
+    // packmate (within kPackRadius of the target) is fought regardless of where
+    // camp sits.
+    auto addOther = [&](float x, float y, float z)
+    {
+        if (std::fabs(z - target->GetPositionZ()) > DC_Z_LEVEL_TOLERANCE)
+            return;
+        if (target->GetExactDist2d(x, y) <= kPackRadius)
+            return;
+        others.emplace_back(x, y, z);
+    };
+
+    DcThreatMap const* threatMap =
+        DcSettings::GetBool(bot, "ThreatMap") ? DcThreatMap::Get(bot->GetMap()) : nullptr;
+    if (threatMap)
+    {
+        Map* map = bot->GetMap();
+        float const range = sPlayerbotAIConfig.sightDistance * 4.0f;  // the far-target scan's reach
+        for (DcThreatEntry const* e :
+             threatMap->AliveWithin(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(), range))
+        {
+            if (e->loaded)
+            {
+                if (!keepOther(map->GetCreature(e->guid)))
+                    continue;
+            }
+            else if (DcNeverTargetRegistry::IsNeverTarget(bot->GetMapId(), e->entry))
+                continue;
+            addOther(e->x, e->y, e->z);
+        }
+    }
+    else
+    {
+        GuidVector const& farTargets =
+            ctx->GetValue<GuidVector>(DcKey::FarTargets)->Get();
+        GuidVector const& possibleTargets =
+            ctx->GetValue<GuidVector>(DcKey::Stock::PossibleTargets)->Get();
+        GuidVector const& candidates = farTargets.empty() ? possibleTargets : farTargets;
+        others.reserve(candidates.size());
+        for (ObjectGuid guid : candidates)
+        {
+            Unit* u = ObjectAccessor::GetUnit(*bot, guid);
+            if (keepOther(u))
+                addOther(u->GetPositionX(), u->GetPositionY(), u->GetPositionZ());
+        }
     }
 
     auto clearanceAt = [&others](Position const& p) -> float
     {
         float nearest = std::numeric_limits<float>::max();
-        for (Unit* u : others)
-            nearest = std::min(nearest, p.GetExactDist2d(u));
+        for (Position const& o : others)
+            nearest = std::min(nearest, p.GetExactDist2d(&o));
         return nearest;
     };
 
