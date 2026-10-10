@@ -811,6 +811,20 @@ bool DungeonClearPullAction::Execute(Event /*event*/)
             // or the wait times out. Followers trail normally (pull mode is off).
             if (pull.decision == DcPullDecisionCode::PatrolHold)
             {
+                // A pull-back boss's pre-clear waits AT THE CAMP, out of his loop,
+                // with the raid: a hold that starts while the tank is walking out
+                // to a pack on Baron Geddon's loop must not leave it standing in
+                // his path.
+                if (DcTargeting::IsPullbackPreclearTarget(bot, context, trash) && pull.HasCamp() &&
+                    bot->GetExactDist2d(&camp) > DC_ROOM_LANE_ARRIVE)
+                {
+                    DcMoveTo(bot->GetMapId(), camp.GetPositionX(), camp.GetPositionY(), camp.GetPositionZ(),
+                             /*idle*/ false, /*react*/ false, /*normal_only*/ false, /*exact_waypoint*/ false,
+                             MovementPriority::MOVEMENT_NORMAL);
+                    DC_PULL_TRACE("[DC:{}] pull idle: patrol-boss hold -> waiting at the camp ({:.1f}yd)",
+                                  bot->GetName(), bot->GetExactDist2d(&camp));
+                    return true;
+                }
                 // Hold, not Soft: this branch is only reached at commit range,
                 // i.e. the tank arrives here mid escort-spline glide driven by
                 // Advance. Stop::Soft is not escort-aware and lets the tank coast

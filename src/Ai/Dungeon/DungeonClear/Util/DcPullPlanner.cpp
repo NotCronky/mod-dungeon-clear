@@ -882,7 +882,12 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
                              target->GetPositionX(), target->GetPositionY(), due->etaSec,
                              (now - pull.patrolBossHoldSince) / 1000u);
             }
-            apply(false, DcPullDecisionCode::PatrolHold);
+            // Pull mode stays ON for a pull-back boss's pre-clear: the raid holds
+            // at his camp and the tank waits there too (the pull's hold branch).
+            // Off, the camp was dropped every lap of Baron Geddon's loop, the raid
+            // followed the tank into his room and back out again when the hold
+            // ended (tr-20261010-031442-2).
+            apply(pullbackPreclear, DcPullDecisionCode::PatrolHold);
             return;
         }
     }
@@ -1026,8 +1031,10 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         // Already committed ADVANCED for this pack: locked, never reconsidered.
         // (decision == 3 is a HOLD, not a commit — curBool is still false there, so
         // it falls through to the throttled re-check below and keeps re-evaluating
-        // the patrol contention until the patrol passes or the wait times out.)
-        if (curBool)
+        // the patrol contention until the patrol passes or the wait times out.
+        // A pull-back boss's pre-clear holds with the mode ON, so the hold code
+        // is checked as well as the bool.)
+        if (curBool && pull.decision != DcPullDecisionCode::PatrolHold)
             return;
         // Standing Leeroy or patrol-hold: re-check on a throttle. The verdict can
         // UPGRADE to Advanced (room changed) or resolve a patrol hold either way.
