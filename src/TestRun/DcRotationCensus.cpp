@@ -45,8 +45,23 @@ namespace
         std::uint64_t healing = 0;
         std::uint32_t activeMs = 0;
         std::uint32_t lastMs = 0;  // getMSTime() of the last event; 0 = none yet
+        std::uint32_t swings = 0;
+        std::uint32_t shots = 0;
+        std::uint64_t autoDamage = 0;
     };
     std::unordered_map<ObjectGuid, MeterTally> sMeters;
+
+    // What a tracked member's next hit lands with: the melee / spell damage
+    // hooks run before the core deals the damage (OnDamage). Keyed by the
+    // attacker, matched on the victim; `autoAttack` is a melee swing, an Auto
+    // Shot or a wand shot. A missed swing leaves its entry behind until the
+    // member's next hook overwrites it.
+    struct OutgoingHit
+    {
+        ObjectGuid victim;
+        bool autoAttack = false;
+    };
+    std::unordered_map<ObjectGuid, OutgoingHit> sOutgoing;
 
     // The spell a hit on a tracked member is about to land with: the core asks
     // the spell / periodic / melee damage hooks first, then deals the damage
@@ -64,7 +79,7 @@ namespace
     // without touching the lock.
     std::atomic<std::uint32_t> sTracked{0};
 
-    void AddToMeter(Unit* source, std::uint64_t damage, std::uint64_t healing)
+    void AddToMeter(Unit* source, std::uint64_t damage, std::uint64_t healing, std::uint64_t autoDamage = 0)
     {
         if (!sTracked.load(std::memory_order_relaxed) || !source)
             return;
@@ -82,6 +97,7 @@ namespace
         MeterTally& m = meter->second;
         m.damage += damage;
         m.healing += healing;
+        m.autoDamage += autoDamage;
         if (m.lastMs)
             m.activeMs += std::min(getMSTimeDiff(m.lastMs, now), DcRotationCensus::ActiveGapMs);
         m.lastMs = now;
@@ -114,6 +130,19 @@ namespace
 
         void OnSpellCast(Spell* spell, Unit* /*caster*/, SpellInfo const* spellInfo, bool /*skipCheck*/) override
         {
+            // Each Auto Shot or wand shot is a triggered cast of the auto-repeat spell: a shot, not a rotation line.
+            if (spell && spell->IsTriggered() && spellInfo->IsAutoRepeatRangedSpell())
+            {
+                if (!sTracked.load(std::memory_order_relaxed) || !spell->GetCaster() || !spell->GetCaster()->IsPlayer())
+                    return;
+
+                std::lock_guard<std::mutex> guard(sLock);
+                auto meter = sMeters.find(spell->GetCaster()->GetGUID());
+                if (meter != sMeters.end())
+                    ++meter->second.shots;
+                return;
+            }
+
             Player* player = TrackedCaster(spell);
             if (!player)
                 return;
@@ -132,33 +161,54 @@ namespace
         DcRotationCensusMeterScript()
             : UnitScript("DcRotationCensusMeterScript", true,
                          { UNITHOOK_ON_DAMAGE, UNITHOOK_ON_HEAL, UNITHOOK_MODIFY_SPELL_DAMAGE_TAKEN,
-                           UNITHOOK_MODIFY_PERIODIC_DAMAGE_AURAS_TICK, UNITHOOK_MODIFY_MELEE_DAMAGE }) { }
+                           UNITHOOK_MODIFY_PERIODIC_DAMAGE_AURAS_TICK, UNITHOOK_MODIFY_MELEE_DAMAGE,
+                           UNITHOOK_ON_BEFORE_ROLL_MELEE_OUTCOME_AGAINST }) { }
 
         void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& /*damage*/, SpellInfo const* spellInfo) override
         {
             NoteSpell(target, attacker, spellInfo ? spellInfo->Id : 0);
+            NoteOutgoing(attacker, target, spellInfo && spellInfo->IsAutoRepeatRangedSpell());
         }
 
         void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& /*damage*/,
                                            SpellInfo const* spellInfo) override
         {
             NoteSpell(target, attacker, spellInfo ? spellInfo->Id : 0);
+            NoteOutgoing(attacker, target, false);
         }
 
         void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& /*damage*/) override
         {
             NoteSpell(target, attacker, 0);
+            NoteOutgoing(attacker, target, true);
+        }
+
+        // Once per melee swing (main or off hand), hit or miss; melee abilities roll elsewhere.
+        void OnBeforeRollMeleeOutcomeAgainst(Unit const* attacker, Unit const* /*victim*/, WeaponAttackType /*attType*/,
+                                             int32& /*attackerMaxSkillValueForLevel*/,
+                                             int32& /*victimMaxSkillValueForLevel*/, int32& /*attackerWeaponSkill*/,
+                                             int32& /*victimDefenseSkill*/, int32& /*crit_chance*/,
+                                             int32& /*miss_chance*/, int32& /*dodge_chance*/, int32& /*parry_chance*/,
+                                             int32& /*block_chance*/) override
+        {
+            if (!sTracked.load(std::memory_order_relaxed) || !attacker || !attacker->IsPlayer())
+                return;
+            std::lock_guard<std::mutex> guard(sLock);
+            auto meter = sMeters.find(attacker->GetGUID());
+            if (meter != sMeters.end())
+                ++meter->second.swings;
         }
 
         void OnDamage(Unit* attacker, Unit* victim, uint32& damage) override
         {
             NoteHit(attacker, victim, damage);
+            bool const autoAttack = TakeOutgoing(attacker, victim);
 
             // Damage into enemies only: not Life Tap, Hellfire's self-burn or a mind-controlled party member.
             if (!attacker || !victim || !damage || attacker == victim || !attacker->IsHostileTo(victim))
                 return;
 
-            AddToMeter(attacker, damage, 0);
+            AddToMeter(attacker, damage, 0, autoAttack ? damage : 0);
         }
 
         void OnHeal(Unit* healer, Unit* /*receiver*/, uint32& gain) override
@@ -168,6 +218,29 @@ namespace
         }
 
     private:
+        static void NoteOutgoing(Unit* attacker, Unit* target, bool autoAttack)
+        {
+            if (!sTracked.load(std::memory_order_relaxed) || !attacker || !target || !attacker->IsPlayer())
+                return;
+            std::lock_guard<std::mutex> guard(sLock);
+            if (sMeters.count(attacker->GetGUID()))
+                sOutgoing[attacker->GetGUID()] = OutgoingHit{ target->GetGUID(), autoAttack };
+        }
+
+        // Whether the hit about to be dealt is the attacker's auto-attack; clears the note either way.
+        static bool TakeOutgoing(Unit* attacker, Unit* victim)
+        {
+            if (!sTracked.load(std::memory_order_relaxed) || !attacker || !victim || !attacker->IsPlayer())
+                return false;
+            std::lock_guard<std::mutex> guard(sLock);
+            auto outgoing = sOutgoing.find(attacker->GetGUID());
+            if (outgoing == sOutgoing.end())
+                return false;
+            bool const autoAttack = outgoing->second.autoAttack && outgoing->second.victim == victim->GetGUID();
+            sOutgoing.erase(outgoing);
+            return autoAttack;
+        }
+
         static void NoteSpell(Unit* target, Unit* attacker, std::uint32_t spellId)
         {
             if (!sTracked.load(std::memory_order_relaxed) || !target || !attacker || !target->IsPlayer())
@@ -243,6 +316,7 @@ void DcRotationCensus::Start(ObjectGuid guid)
     sTallies[guid].clear();
     sMeters[guid] = MeterTally{};
     sPending.erase(guid);
+    sOutgoing.erase(guid);
     sLastHits.erase(guid);
     sTracked.store(static_cast<std::uint32_t>(sMeters.size()), std::memory_order_relaxed);
 }
@@ -253,6 +327,7 @@ void DcRotationCensus::Stop(ObjectGuid guid)
     sTallies.erase(guid);
     sMeters.erase(guid);
     sPending.erase(guid);
+    sOutgoing.erase(guid);
     sLastHits.erase(guid);
     sTracked.store(static_cast<std::uint32_t>(sMeters.size()), std::memory_order_relaxed);
 }
@@ -267,6 +342,9 @@ DcRotationCensus::MeterReading DcRotationCensus::Meter(ObjectGuid guid)
         reading.damage = meter->second.damage;
         reading.healing = meter->second.healing;
         reading.activeS = meter->second.activeMs / 1000;
+        reading.swings = meter->second.swings;
+        reading.shots = meter->second.shots;
+        reading.autoDamage = meter->second.autoDamage;
     }
     return reading;
 }
@@ -332,6 +410,10 @@ void DcRotationCensus::Collect(Player* player, std::vector<SpellLine>& lines, st
 
         SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
         if (!info || info->IsPassive() || !family || info->SpellFamilyName != family)
+            continue;
+
+        // Auto Shot and wand Shoot fire as triggered casts: Meter()'s `shots`, not a line here.
+        if (info->IsAutoRepeatRangedSpell())
             continue;
 
         if (std::uint32_t next = sSpellMgr->GetNextSpellInChain(spellId))

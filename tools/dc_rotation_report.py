@@ -7,7 +7,8 @@
     dc_rotation_report.py --class rogue        one class
     dc_rotation_report.py --per-run            one block per party member instead of per class/spec
 
-Per class and spec, summed over the runs: DPS / HPS over the active seconds (record schema 15+), each spell's casts and its share of the casts, how many casts the
+Per class and spec, summed over the runs: DPS / HPS over the active seconds (record schema 15+), auto-attacks (melee
+swings, Auto Shot / wand shots and their share of the damage, schema 18+), each spell's casts and its share of the casts, how many casts the
 server refused and the most common reason (a spell that keeps failing for the same reason is a rotation
 reaching for something it can't use: wrong stance or form, out of range, no reagent), and the class
 abilities the bots knew but never cast.
@@ -84,10 +85,20 @@ def meter_text(damage, healing, active):
     return ", ".join(p for p in parts if p)
 
 
-def print_block(title, runs, casts, failed, reasons, unused, members, names, meter=""):
+def auto_text(g):
+    """'auto-attacks: 812 swings, 0 shots, 41% of damage' (record schema 18+), or ''."""
+    if not g["autoTracked"]:
+        return ""
+    share = f", {100.0 * g['autoDamage'] / g['damage']:.0f}% of damage" if g["damage"] else ""
+    return f"auto-attacks: {g['autoSwings']} swings, {g['autoShots']} shots{share}"
+
+
+def print_block(title, runs, casts, failed, reasons, unused, members, names, meter="", auto=""):
     total = sum(casts.values())
     print(f"\n== {title}  ({members} member{'s' if members != 1 else ''} over {runs} run{'s' if runs != 1 else ''}, "
           f"{total} casts{', ' + meter if meter else ''})")
+    if auto:
+        print(f"   {auto}")
     if not casts and not failed:
         print("   no spells cast or tried")
     rows = sorted(set(casts) | set(failed), key=lambda s: (-casts[s], -failed[s], s))
@@ -125,7 +136,8 @@ def main():
 
     groups = defaultdict(lambda: {"runs": set(), "members": 0, "casts": Counter(), "failed": Counter(),
                                   "reasons": defaultdict(Counter), "unused": Counter(),
-                                  "damage": 0, "healing": 0, "active": 0})
+                                  "damage": 0, "healing": 0, "active": 0,
+                                  "autoTracked": False, "autoSwings": 0, "autoShots": 0, "autoDamage": 0})
     for rec in runs:
         for member in rec.get("comp", []):
             if args.cls and member.get("class") != args.cls.lower():
@@ -141,6 +153,11 @@ def main():
             g["damage"] += member.get("damage", 0)
             g["healing"] += member.get("healing", 0)
             g["active"] += member.get("activeS", 0)
+            if "autoSwings" in member:
+                g["autoTracked"] = True
+                g["autoSwings"] += member["autoSwings"]
+                g["autoShots"] += member.get("autoShots", 0)
+                g["autoDamage"] += member.get("autoDamage", 0)
             for spell in member.get("rotation", []):
                 g["casts"][spell["name"]] += spell["casts"]
                 g["failed"][spell["name"]] += spell.get("failed", 0)
@@ -152,7 +169,7 @@ def main():
     for key in sorted(groups):
         g = groups[key]
         print_block(key, len(g["runs"]), g["casts"], g["failed"], g["reasons"], g["unused"], g["members"], names,
-                    meter_text(g["damage"], g["healing"], g["active"]))
+                    meter_text(g["damage"], g["healing"], g["active"]), auto_text(g))
 
 
 if __name__ == "__main__":

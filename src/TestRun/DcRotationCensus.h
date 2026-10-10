@@ -49,11 +49,21 @@ namespace DcRotationCensus
     // time is the meter convention: the gaps between the member's damage and
     // heal events, each capped at ActiveGapMs, so DPS = damage / activeS is
     // the rate while it was actually fighting, not over the walks between packs.
+    //
+    // Auto-attacks, which the spell lines can't show (a swing is no spell, and
+    // each Auto Shot or wand shot is a triggered cast): `swings` counts the
+    // member's own melee swings, misses included; `shots` counts its Auto Shot
+    // and wand shots; `autoDamage` is the part of `damage` they dealt (the
+    // member's own, not its pets'). A melee member whose autoDamage is near 0
+    // is casting without swinging.
     struct MeterReading
     {
         std::uint64_t damage = 0;
         std::uint64_t healing = 0;
         std::uint32_t activeS = 0;
+        std::uint32_t swings = 0;
+        std::uint32_t shots = 0;
+        std::uint64_t autoDamage = 0;
     };
 
     constexpr std::uint32_t ActiveGapMs = 3000;
