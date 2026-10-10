@@ -695,6 +695,9 @@ inline constexpr DcSettingDef kDcSettings[] =
     // up holding after PullPatrolBossHoldSec. Clearance 0 = off.
     { "PullPatrolBossClearance", DcType::Float, 50,  0, 150,  true  },
     { "PullPatrolBossFightSec",  DcType::Float, 45,  5, 180,  true  },
+    // The same horizon for a pull-back boss's pre-clear, which is dragged out of
+    // his loop: only the walk-in, tag and first yards of the drag must miss him.
+    { "PullPatrolBossDragSec",   DcType::Float, 15,  5, 180,  true  },
     { "PullPatrolBossHoldSec",   DcType::Float, 240, 10, 600, true  },
     // A patrolling pull-back boss (Baron Geddon) is tagged only within
     // PatrolBossTagRange of the camp, with no idle mob within
