@@ -909,7 +909,18 @@ bool DungeonClearPullAction::Execute(Event /*event*/)
                 // prospective camp (so the party trails up in parallel) and walk
                 // straight to the room-trash unit until it is within commit range,
                 // then fall through to the normal Forming handshake below.
-                if (DcTargeting::IsRoomClearActive(bot, context))
+                //
+                // A PULL-BACK boss's pre-clear (DcTargeting::PatrolBossPreclearTarget:
+                // the packs around Baron Geddon's camp and along his loop) has the
+                // same need and no room row. Advance there only walks to the anchor
+                // and the at-boss rung outranks it, so a yield parked the raid at
+                // the anchor in the tunnel for good, the room never touched
+                // (tr-20261010-015358-1). The patrol-boss hold above still times it:
+                // while he is due near the pack the tank holds before reaching here.
+                bool const pullbackPreclear =
+                    next.has_value() && trash->GetEntry() != next->entry &&
+                    BossPullbackRegistry::Find(bot->GetMapId(), next->entry);
+                if (DcTargeting::IsRoomClearActive(bot, context) || pullbackPreclear)
                 {
                     float sb = 0.0f, sr = 0.0f, md = 0.0f;
                     DcResolveCampParams(bot, context, sb, sr, md);
