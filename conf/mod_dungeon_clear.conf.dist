@@ -1297,20 +1297,26 @@ DungeonClear.PullPatrolWaitSec = 8.0
 #
 #    DungeonClear.PullPatrolBossClearance
 #    DungeonClear.PullPatrolBossFightSec
+#    DungeonClear.PullPatrolBossDragSec
 #    DungeonClear.PullPatrolBossHoldSec
 #        Dynamic mode only. Before pulling a pack, the tank checks every boss that
 #        walks a patrol loop (Baron Geddon in Molten Core): if the loop brings
 #        that boss within PullPatrolBossClearance yards of the pack within the
 #        next PullPatrolBossFightSec seconds, the tank holds short of the pack
 #        until the boss has walked on. It stops holding after
-#        PullPatrolBossHoldSec seconds in any case. Needs DungeonClear.ThreatMap.
-#        Clearance 0 turns the check off.
+#        PullPatrolBossHoldSec seconds in any case (per pack). Needs
+#        DungeonClear.ThreatMap. Clearance 0 turns the check off.
+#        The packs cleared around a pull-back boss's camp (Baron Geddon's) are
+#        always dragged to that camp, out of his loop, so for them the horizon
+#        is PullPatrolBossDragSec instead: only the walk-in, tag and first yards
+#        of the drag must miss him.
 #
-#        Default: 50.0 / 45.0 / 240.0
+#        Default: 50.0 / 45.0 / 15.0 / 240.0
 #
 
 DungeonClear.PullPatrolBossClearance = 50.0
 DungeonClear.PullPatrolBossFightSec = 45.0
+DungeonClear.PullPatrolBossDragSec = 15.0
 DungeonClear.PullPatrolBossHoldSec = 240.0
 
 #

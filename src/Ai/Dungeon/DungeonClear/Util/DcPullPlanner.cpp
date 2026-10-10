@@ -828,6 +828,13 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
     // pack, and hold (decision 3: the tank stops at commit range, nobody tags)
     // while that is inside the time a fight takes. Capped by
     // PullPatrolBossHoldSec so a loop that never clears cannot stall the run.
+    //
+    // A pull-back boss's pre-clear packs are dragged to his camp, out of his loop
+    // (forced Advanced below), so the fight is not where the pack stands: only the
+    // walk-in, tag and first yards of the drag are, and the horizon is
+    // PullPatrolBossDragSec. With the fight horizon every Firewalker pack on Baron
+    // Geddon's loop held the full cap, 240s each (tr-20261010-025005-2).
+    bool const pullbackPreclear = DcTargeting::IsPullbackPreclearTarget(bot, context, target);
     {
         float const clearance = DcSettings::GetFloat(bot, "PullPatrolBossClearance");
         DcThreatMap const* threatMap = clearance > 0.0f && DcSettings::GetBool(bot, "ThreatMap")
@@ -835,7 +842,8 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         std::optional<DcPatrolArrival> const due = threatMap
             ? threatMap->NextPatrollingBoss(target->GetPositionX(), target->GetPositionY(),
                                             target->GetPositionZ(), clearance,
-                                            DcSettings::GetFloat(bot, "PullPatrolBossFightSec"))
+                                            DcSettings::GetFloat(bot, pullbackPreclear ? "PullPatrolBossDragSec"
+                                                                                       : "PullPatrolBossFightSec"))
             : std::nullopt;
         uint32 const now = getMSTime();
         uint32 const capMs = static_cast<uint32>(DcSettings::GetFloat(bot, "PullPatrolBossHoldSec") * 1000.0f);
@@ -883,7 +891,11 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         DcEngageGeometry::EnRouteSweepApplies(bot) &&
         DcEngageGeometry::TargetInsideBystanderPack(bot, target);
 
-    bool const forceAdv = DcTargeting::RoomClearForcesAdvanced(bot, context, target) ||
+    // A pull-back boss's pre-clear is dragged to his camp: fought where it stands,
+    // a pack on Baron Geddon's loop was a LEEROY, a fight in his path that also
+    // switched pull mode off and left the tank cycling between pull, Advance and
+    // the at-boss rung without committing (tr-20261010-025005-2).
+    bool const forceAdv = pullbackPreclear || DcTargeting::RoomClearForcesAdvanced(bot, context, target) ||
                           insideNeighbour ||
                           DcSettings::GetBool(bot, "PullForceAdvanced");
 

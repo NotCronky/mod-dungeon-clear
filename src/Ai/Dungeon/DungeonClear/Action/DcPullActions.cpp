@@ -917,9 +917,7 @@ bool DungeonClearPullAction::Execute(Event /*event*/)
                 // the anchor in the tunnel for good, the room never touched
                 // (tr-20261010-015358-1). The patrol-boss hold above still times it:
                 // while he is due near the pack the tank holds before reaching here.
-                bool const pullbackPreclear =
-                    next.has_value() && trash->GetEntry() != next->entry &&
-                    BossPullbackRegistry::Find(bot->GetMapId(), next->entry);
+                bool const pullbackPreclear = DcTargeting::IsPullbackPreclearTarget(bot, context, trash);
                 if (DcTargeting::IsRoomClearActive(bot, context) || pullbackPreclear)
                 {
                     float sb = 0.0f, sr = 0.0f, md = 0.0f;
