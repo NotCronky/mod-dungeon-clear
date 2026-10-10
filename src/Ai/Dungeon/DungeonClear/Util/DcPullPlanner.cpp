@@ -840,18 +840,25 @@ void DcPullPlanner::UpdateDynamicPullMode(PlayerbotAI* botAI, AiObjectContext* c
         uint32 const now = getMSTime();
         uint32 const capMs = static_cast<uint32>(DcSettings::GetFloat(bot, "PullPatrolBossHoldSec") * 1000.0f);
         bool const holdDue = due && due->who->entry != target->GetEntry();
-        // The cap's clock only restarts once nothing has been due for a while: a
-        // boss whose loop keeps him coming back must not reset it by dropping out
-        // of the horizon for a tick (tr-20261008-010759-1 held 20 minutes in 20s
-        // cycles, each starting again from 0s).
-        constexpr uint32 kHoldClearResetMs = 10000;
-        if (holdDue)
-            pull.patrolBossClearSince = 0;
-        else if (!pull.patrolBossClearSince)
-            pull.patrolBossClearSince = now ? now : 1;
-        if (!holdDue && pull.patrolBossClearSince && now - pull.patrolBossClearSince >= kHoldClearResetMs)
+        // The cap's clock belongs to the pack and runs from its first hold: only a
+        // new pack restarts it. A boss whose loop brings him back every lap must not
+        // reset it between passes. tr-20261008-010759-1 held 20 minutes in 20s
+        // cycles; a 10s-clear reset then let Baron Geddon's ~60s loop past a
+        // Flameguard pack restart it every lap (tr-20261010-012356-1, the raid held
+        // at the pack for good).
+        if (pull.patrolBossHoldTarget != target->GetGUID())
+        {
+            pull.patrolBossHoldTarget = target->GetGUID();
             pull.patrolBossHoldSince = 0;
-        if (holdDue && (!pull.patrolBossHoldSince || now - pull.patrolBossHoldSince < capMs))
+        }
+        bool const capSpent = pull.patrolBossHoldSince && now - pull.patrolBossHoldSince >= capMs;
+        if (holdDue && capSpent && pull.patrolBossHoldLogMs)
+        {
+            pull.patrolBossHoldLogMs = 0;  // once per pack: the hold is over for it
+            DC_PULL_INFO("[DC:{}] patrol-boss hold: {}s on {} (entry {}) without a clear window -> pulling anyway",
+                         bot->GetName(), capMs / 1000u, target->GetName(), target->GetEntry());
+        }
+        if (holdDue && !capSpent)
         {
             if (!pull.patrolBossHoldSince)
                 pull.patrolBossHoldSince = now ? now : 1;
