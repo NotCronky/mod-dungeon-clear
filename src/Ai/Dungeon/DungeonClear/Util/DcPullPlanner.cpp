@@ -9,6 +9,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcThreatMap.h"
 
+#include "Util/DcPlayerbotsConfig.h"
 #include "DungeonClearUtil.h"   // DC_PULL_* macros + DcTargeting::GetPullTarget (until DcTargeting moves)
 
 #include "DcBreadcrumb.h"
@@ -1186,7 +1187,7 @@ std::optional<Position> DcPullPlanner::ComputeSafeCamp(PlayerbotAI* botAI, Unit*
     if (threatMap)
     {
         Map* map = bot->GetMap();
-        float const range = sPlayerbotAIConfig.sightDistance * 4.0f;  // the far-target scan's reach
+        float const range = DC_PB_CONFIG(SightDistance, sightDistance) * 4.0f;  // the far-target scan's reach
         for (DcThreatEntry const* e :
              threatMap->AliveWithin(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(), range))
         {
