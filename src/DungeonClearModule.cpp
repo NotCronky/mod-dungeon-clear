@@ -81,6 +81,7 @@
 #include "WarlockAiObjectContext.h"
 #include "WarriorAiObjectContext.h"
 
+#include "Assemble/DcAssembleManager.h"
 #include "BgQueueFill/DcBgQueueFillManager.h"
 #include "DungeonQueueFill/DcDungeonQueueFillManager.h"
 #include "Util/DcProvisionBudget.h"
@@ -550,6 +551,12 @@ public:
         // when switched off, and it too gets a live player's claim on the
         // provisioning ration ahead of the test harness.
         DcBgQueueFillManager::Instance().Tick(diff);
+
+        // `.dc assemble`: bots a player asked into their group. Ahead of the
+        // module gate for the same reason as the fills (it releases what it
+        // holds when switched off), and ahead of the test harness on the
+        // provisioning ration: a live player is waiting on it.
+        DcAssembleManager::Instance().Tick(diff);
 
         if (!DcModule::IsEnabled())
             return;

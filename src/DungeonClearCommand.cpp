@@ -35,6 +35,7 @@
 
 #include "DcModuleEnable.h"
 #include "DungeonClearDispatch.h"
+#include "Assemble/DcAssembleManager.h"
 #include "BgQueueFill/DcBgQueueFillManager.h"
 #include "DungeonQueueFill/DcDungeonQueueFillManager.h"
 #include "Lab/DcLabManager.h"
@@ -293,6 +294,69 @@ namespace
         if (held.empty())
             g_watchBinds.erase(gm->GetGUID());
     }
+
+    // `.dc assemble <size> [tank|heal|dps]`: fill the issuer's group to <size>
+    // with ready bots of the missing roles (DcAssembleManager). Bare, it shows
+    // what the issuer has assembled.
+    bool HandleAssemble(ChatHandler* handler, Optional<uint32> size, Optional<std::string> role)
+    {
+        if (DcDisabledNotice(handler))
+            return true;
+
+        Player* issuer = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
+        if (!issuer)
+        {
+            handler->SendSysMessage("This command must be used in-game.");
+            return true;
+        }
+
+        if (!size)
+        {
+            handler->SendSysMessage(DcAssembleManager::Instance().StatusFor(issuer));
+            handler->SendSysMessage("Usage: .dc assemble <2-40> [tank|heal|dps] (your role; default: your talents). "
+                                    ".dc dismiss removes them.");
+            return true;
+        }
+
+        std::string playerRole = role ? *role : "";
+        std::transform(playerRole.begin(), playerRole.end(), playerRole.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (playerRole == "healer")
+            playerRole = "heal";
+        if (playerRole == "damage")
+            playerRole = "dps";
+        if (!playerRole.empty() && playerRole != "tank" && playerRole != "heal" && playerRole != "dps")
+        {
+            handler->SendErrorMessage("Your role is tank, heal or dps.");
+            return false;
+        }
+        if (*size < 2 || *size > 40)
+        {
+            handler->SendErrorMessage("A group is 2 to 40 players.");
+            return false;
+        }
+
+        std::string msg;
+        bool const ok = DcAssembleManager::Instance().Assemble(issuer, *size, playerRole, &msg);
+        handler->SendSysMessage(msg);
+        return ok;
+    }
+
+    // `.dc dismiss`: log out every bot `.dc assemble` added for the issuer.
+    bool HandleDismiss(ChatHandler* handler)
+    {
+        Player* issuer = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
+        if (!issuer)
+        {
+            handler->SendSysMessage("This command must be used in-game.");
+            return true;
+        }
+
+        std::string msg;
+        bool const ok = DcAssembleManager::Instance().Dismiss(issuer, &msg);
+        handler->SendSysMessage(msg);
+        return ok;
+    }
 }
 
 class dungeon_clear_command_script : public CommandScript
@@ -367,6 +431,8 @@ public:
             { "wing",   HandleWing,   SEC_PLAYER, Console::No },
             { "config", HandleConfig, SEC_PLAYER, Console::No },
             { "spectate", HandleSpectate, SEC_PLAYER, Console::No },
+            { "assemble", HandleAssemble, SEC_PLAYER, Console::No },
+            { "dismiss",  HandleDismiss,  SEC_PLAYER, Console::No },
             { "test",   dcTestTable },
             { "lab",    dcLabTable },
             { "dungeonqueuefill", dcQueueFillTable },

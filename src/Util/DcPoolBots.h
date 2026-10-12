@@ -27,7 +27,7 @@ class Player;
 // World thread only, like both callers.
 namespace DcPoolBots
 {
-    // Is `guid` held by a queue fill — dungeon or battleground? The `.dc test`
+    // Is `guid` held by a queue fill — dungeon or battleground — or a `.dc assemble`? The `.dc test`
     // harness asks this before it claims, and each fill asks it of the other.
     // A claim is invisible to the other subsystems for the tick between
     // picking a guid and AddPlayerBot landing, so "already online" is not a

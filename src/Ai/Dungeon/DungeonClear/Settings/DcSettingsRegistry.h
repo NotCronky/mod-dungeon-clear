@@ -876,6 +876,13 @@ inline constexpr DcSettingDef kDcSettings[] =
     { "BgQueueFill.GearQuality",     DcType::UInt,   0,  0,      7, false },
     { "BgQueueFill.LogoutOnRelease", DcType::Bool,   1,  0,      1, false },
 
+    // `.dc assemble` (DungeonClear.Assemble.*): bots a player asks into their
+    // own group. Server policy, read every tick by DcAssembleManager.
+    { "Assemble.Enable",          DcType::Bool,   1,  0,      1, false },
+    { "Assemble.SetupTimeoutSec", DcType::UInt, 120, 10,    600, false },
+    { "Assemble.GearIlvl",        DcType::UInt,   0,  0, 100000, false },
+    { "Assemble.GearQuality",     DcType::UInt,   0,  0,      7, false },
+
     // Server-only (not overridable from the addon).
     { "AsyncPathfinding",      DcType::Bool,   1,   0,   1,  false },
     { "PathCenterEnable",      DcType::Bool,   1,   0,   1,  false },
