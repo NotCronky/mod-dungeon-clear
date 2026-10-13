@@ -195,16 +195,48 @@ TEST(DcFormationTest, SlotOffsetIsDeterministicAndBounded)
     EXPECT_LE(r, 6.0f + 0.001f);  // ring + up to 1yd variance
 }
 
-TEST(DcFormationTest, RaidFollowAngleSegmentsBySubgroup)
+
+TEST(DcFormationTest, ColumnSlotsRowsCentredOnThePath)
 {
-    constexpr float kTwoPi = 2.0f * 3.14159265f;
-    for (uint8 sg = 0; sg < 8; ++sg)
+    // Two abreast: slots 0/1 the first row, 2/3 the second, each row centred.
+    auto const s0 = DcFormation::ColumnSlot(0, 2, 4.0f, 3.0f, 2.5f);
+    auto const s1 = DcFormation::ColumnSlot(1, 2, 4.0f, 3.0f, 2.5f);
+    auto const s2 = DcFormation::ColumnSlot(2, 2, 4.0f, 3.0f, 2.5f);
+    EXPECT_FLOAT_EQ(s0.lag, 4.0f);
+    EXPECT_FLOAT_EQ(s1.lag, 4.0f);
+    EXPECT_FLOAT_EQ(s2.lag, 7.0f);
+    EXPECT_FLOAT_EQ(s0.lateral, -1.25f);
+    EXPECT_FLOAT_EQ(s1.lateral, 1.25f);
+    // One wide is a single file on the path.
+    EXPECT_FLOAT_EQ(DcFormation::ColumnSlot(3, 1, 4.0f, 3.0f, 2.5f).lateral, 0.0f);
+    EXPECT_FLOAT_EQ(DcFormation::ColumnSlot(3, 1, 4.0f, 3.0f, 2.5f).lag, 13.0f);
+}
+
+TEST(DcFormationTest, ColumnFollowOffsetIsAlwaysBehindTheTank)
+{
+    // Relative to the tank's facing, 0 is in front: every slot must be behind
+    // (|angle| > 90 degrees), never in front or level with the tank.
+    for (uint32 i = 0; i < 40; ++i)
     {
-        float const a = DcFormation::RaidFollowAngle(sg, 42);
-        EXPECT_GE(a, 0.0f);
-        EXPECT_LT(a, kTwoPi);
+        auto const slot = DcFormation::ColumnSlot(i, 4, 3.0f, 3.0f, 2.5f);
+        float const angle = DcFormation::ColumnFollowAngle(slot);
+        EXPECT_GT(std::fabs(angle), 3.14159265f / 2.0f) << i;
+        EXPECT_GE(DcFormation::ColumnFollowDist(slot), slot.lag);
     }
-    // Distinct subgroups with the same seed land in distinct segments.
-    EXPECT_NE(DcFormation::RaidFollowAngle(0, 7),
-              DcFormation::RaidFollowAngle(4, 7));
+}
+
+TEST(DcFormationTest, ArcOffsetStaysOnTheFarSideOfThePack)
+{
+    // Axis 0: the pack is at -x, the camp at the origin. Every arc slot must be on
+    // the +x side and inside the arc's half-width.
+    float const arc = 2.44f;
+    for (uint32 seed = 1; seed < 500; seed += 7)
+    {
+        auto const off = DcFormation::ArcOffset(seed, 0.0f, arc, 7.0f);
+        EXPECT_GT(off.dx, 0.0f) << seed;
+        EXPECT_LE(std::fabs(std::atan2(off.dy, off.dx)), arc / 2.0f + 0.001f) << seed;
+        float const r = std::sqrt(off.dx * off.dx + off.dy * off.dy);
+        EXPECT_GE(r, 7.0f - 0.001f);
+        EXPECT_LE(r, 8.0f + 0.001f);
+    }
 }

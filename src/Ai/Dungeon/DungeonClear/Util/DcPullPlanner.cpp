@@ -148,6 +148,37 @@ namespace
     }
 }
 
+namespace
+{
+    // Ranged and healers stand on an arc this wide on the far side of the camp
+    // from the pack (DcFormation::ArcOffset): about 140 degrees.
+    constexpr float kCampArcWidth = 2.44f;
+
+    // The direction from the pack being pulled to the camp (radians), from the
+    // pack's home position so it holds still while the pack is dragged in. False
+    // when no pull names a pack.
+    bool CampAxis(Player* bot, Position const& camp, float& axis)
+    {
+        Player* leader = DcLeaderSignal::FindLeaderTank(bot);
+        PlayerbotAI* leaderAI = leader ? GET_PLAYERBOT_AI(leader) : nullptr;
+        if (!leaderAI)
+            return false;
+        DcPullContext const& pull =
+            leaderAI->GetAiObjectContext()->GetValue<DcPullContext&>(DcKey::PullContext)->Get();
+        ObjectGuid const packGuid = pull.pullTarget ? pull.pullTarget : pull.decisionTarget;
+        Creature* pack = packGuid ? ObjectAccessor::GetCreature(*bot, packGuid) : nullptr;
+        if (!pack)
+            return false;
+        Position const home = pack->GetHomePosition();
+        float const dx = camp.GetPositionX() - home.GetPositionX();
+        float const dy = camp.GetPositionY() - home.GetPositionY();
+        if (dx * dx + dy * dy < 1.0f)
+            return false;
+        axis = std::atan2(dy, dx);
+        return true;
+    }
+}
+
 Position DcPullPlanner::ComputeCampSlot(Player* bot, Position const& camp)
 {
     if (!bot)
@@ -182,10 +213,16 @@ Position DcPullPlanner::ComputeCampSlot(Player* bot, Position const& camp)
     DcFormation::RoleRings const rings =
         DcFormation::ComputeRoleRings(meleeCount, rangedCount, healerCount,
                                       /*baseRadius*/ 1.0f);
+    bool const backLine = PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot);
     float const ringRadius = PlayerbotAI::IsHeal(bot)     ? rings.healer
                              : PlayerbotAI::IsRanged(bot) ? rings.ranged
                                                           : rings.melee;
-    DcFormation::Offset const off = DcFormation::SlotOffset(seed, ringRadius);
+    // Ranged and healers on the far side of the camp from the pack, so the pack
+    // reaches the tank and the melee first; melee keep their ring at the tank.
+    float axis = 0.0f;
+    DcFormation::Offset const off = backLine && CampAxis(bot, camp, axis)
+                                        ? DcFormation::ArcOffset(seed, axis, kCampArcWidth, ringRadius)
+                                        : DcFormation::SlotOffset(seed, ringRadius);
 
     float const fx = camp.GetPositionX() + off.dx;
     float const fy = camp.GetPositionY() + off.dy;

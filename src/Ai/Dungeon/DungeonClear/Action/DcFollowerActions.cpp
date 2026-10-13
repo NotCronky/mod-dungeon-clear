@@ -117,6 +117,97 @@ namespace
         return DcMovement::SplinePath(botAI, window);
     }
 
+    // ---- the follow column (DcFormation::ColumnSlot) ----
+    //
+    // Walking, every follower has its own slot in a column on the tank's walked
+    // path: melee in the front rows, ranged behind them, healers at the back, two
+    // abreast in a party and four in a raid. Nobody is placed ahead of the tank or
+    // out to its side, where the old fan (a golden-angle ring all the way round the
+    // tank, relative to its facing) put half the party.
+    constexpr float kColumnRowGap = 3.0f;
+    constexpr float kColumnRowGapMin = 1.5f;
+    constexpr float kColumnColGap = 2.5f;
+    constexpr float kColumnSlotArrival = 1.5f;     // parked at the slot (tank standing)
+    constexpr float kColumnGlideDistance = 10.0f;  // further behind than this: glide the trail
+
+    // This follower's column slot. Only bots take slots (a human stands where they
+    // like). The column always ends inside `maxLag`, so the last row still meets
+    // the tank's spread gate (the scout-lag deadlock described below).
+    DcFormation::ColumnSlotPos ColumnSlotFor(Player* bot, Player* tank, float baseLag, float maxLag)
+    {
+        std::vector<std::pair<std::pair<uint8, uint32>, ObjectGuid>> order;
+        if (Group* group = bot->GetGroup())
+        {
+            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            {
+                Player* member = ref->GetSource();
+                if (!member || member == tank || !member->IsAlive() || member->GetMapId() != bot->GetMapId() ||
+                    !GET_PLAYERBOT_AI(member))
+                    continue;
+                DcFormation::ColumnRole const role = PlayerbotAI::IsHeal(member)     ? DcFormation::ColumnRole::Healer
+                                                     : PlayerbotAI::IsRanged(member) ? DcFormation::ColumnRole::Ranged
+                                                                                     : DcFormation::ColumnRole::Melee;
+                order.push_back({ { static_cast<uint8>(role), static_cast<uint32>(member->GetGUID().GetCounter()) },
+                                  member->GetGUID() });
+            }
+        }
+        std::sort(order.begin(), order.end());
+
+        uint32 index = 0;
+        for (std::size_t i = 0; i < order.size(); ++i)
+            if (order[i].second == bot->GetGUID())
+                index = static_cast<uint32>(i);
+
+        bool const raid = bot->GetMap() && bot->GetMap()->IsRaid();
+        uint32 const perRow = raid ? 4u : 2u;
+        uint32 const rows = std::max<uint32>(1u, (static_cast<uint32>(order.size()) + perRow - 1) / perRow);
+        float rowGap = kColumnRowGap;
+        if (rows > 1 && maxLag > baseLag)
+            rowGap = std::clamp((maxLag - baseLag) / static_cast<float>(rows - 1), kColumnRowGapMin, kColumnRowGap);
+        DcFormation::ColumnSlotPos slot = DcFormation::ColumnSlot(index, perRow, baseLag, rowGap, kColumnColGap);
+        if (maxLag > 0.0f)
+            slot.lag = std::min(slot.lag, std::max(baseLag, maxLag));
+        return slot;
+    }
+
+    // The point `slot` names: `slot.lag` yards back along the tank's walked path,
+    // moved `slot.lateral` yards to the side of the path's direction there. The
+    // side step is dropped when it leaves the walkable ground or the path's line of
+    // sight (a narrow corridor puts the whole row on the path). False when the tank
+    // has no walked path yet.
+    bool ColumnPoint(Player* bot, Player* tank, DcFormation::ColumnSlotPos slot, Position& out)
+    {
+        Position back;
+        if (!DcLeaderSignal::GetLeaderScoutTrailPoint(bot, slot.lag, back, /*probeReachable=*/false))
+            return false;
+        out = back;
+        if (std::fabs(slot.lateral) < 0.1f)
+            return true;
+
+        Position ahead;
+        if (!DcLeaderSignal::GetLeaderScoutTrailPoint(bot, std::max(0.5f, slot.lag - 2.0f), ahead,
+                                                      /*probeReachable=*/false) ||
+            ahead.GetExactDist2d(&back) < 0.5f)
+            ahead = tank->GetPosition();
+        float const dx = ahead.GetPositionX() - back.GetPositionX();
+        float const dy = ahead.GetPositionY() - back.GetPositionY();
+        float const len = std::sqrt(dx * dx + dy * dy);
+        if (len < 0.1f)
+            return true;
+
+        // Left of the direction of travel.
+        float const x = back.GetPositionX() - dy / len * slot.lateral;
+        float const y = back.GetPositionY() + dx / len * slot.lateral;
+        NavmeshSnap::Result const snap = NavmeshSnap::Snap(bot, x, y, back.GetPositionZ(), 3.0f);
+        Map const* map = bot->GetMap();
+        if (snap.ok && snap.distance <= 1.5f && map &&
+            map->isInLineOfSight(back.GetPositionX(), back.GetPositionY(), back.GetPositionZ() + 2.0f, snap.x, snap.y,
+                                 snap.z + 2.0f, bot->GetPhaseMask(), LINEOFSIGHT_ALL_CHECKS,
+                                 VMAP::ModelIgnoreFlags::Nothing))
+            out.Relocate(snap.x, snap.y, snap.z);
+        return true;
+    }
+
     // A TRANSIT OWNS THE COLUMN — follow-tank stands down for it. A true return
     // means "return false, this tick is not yours".
     //
@@ -467,113 +558,49 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
         float const lag =
             std::min(DcSettings::GetFloat(bot, "PullDynamicPartyLag"),
                      std::max(2.0f, maxSpread - kScoutLagSpreadMargin));
-        // 3D, NOT 2D: the tank's spread gate (IsPartyReady) measures GetDistance,
-        // which is 3D — so the hold metric here MUST match it or they diverge on a
-        // ramp/incline. A follower directly down-slope of the tank reads a small 2D
-        // gap (it would hold) while its true 3D distance — what the gate enforces —
-        // blows past PartyMaxSpread, and the tank waits forever for a follower that,
-        // measured in 2D, thinks it is already close enough. This is the "worst on
-        // inclines and ramps" deadlock. The trail-point accumulation (GetExactDist,
-        // 3D) and the arrival hold below are already 3D; this was the last 2D read.
-        float const toTank = bot->GetExactDist(tank);
+        // Each follower holds its own column slot from the scout lag back, not one
+        // shared crumb that the whole party piled onto. Slot distances are 3D
+        // (GetExactDist), as the tank's spread gate (IsPartyReady) measures: a 2D
+        // hold diverged from the gate on ramps, the "worst on inclines" deadlock.
+        DcFormation::ColumnSlotPos const slot =
+            ColumnSlotFor(bot, tank, lag, std::max(2.0f, maxSpread - kScoutLagSpreadMargin));
         // Keep the teardown/orphan-reaper bookkeeping live across the whole window
         // so a follow generator we (or a prior tick) installed is still cancelled
         // when the DC tank goes away.
         followedTank = tank->GetGUID();
         DcFollowerLifecycle::MarkFollowing(bot->GetGUID());
-        if (toTank <= lag)
+        Position slotPoint;
+        if (ColumnPoint(bot, tank, slot, slotPoint))
         {
-            // Inside the lag bubble: hold position. Tear down any leftover
-            // continuous MoveFollow so the bot actually stops instead of creeping
-            // back to the tight followDistance.
-            DcMovement::StopBot(bot, DcMovement::Stop::Hold);
-            DC_PULL_TRACE("[DC:{}] scout-lag: holding {:.1f}yd behind tank (lag {:.1f})",
-                          bot->GetName(), toTank, lag);
-            // Return FALSE, not true: the bot is already stopped, so yield the tick
-            // to the lower-relevance pipeline (eat/drink, loot) exactly as stock
-            // Follow() does on its "no need to follow" in-range early-out. Consuming
-            // the tick here (return true) suppressed the out-of-combat rest routine
-            // — the party held forever at the lag ring and never drank, deadlocking
-            // the tank's between-pulls wait on the party's mana.
-            return false;
-        }
-        // Tank pulled beyond the lag: step up to a point `lag` yards behind the
-        // tank ALONG ITS BREADCRUMB TRAIL — the ground the tank actually walked,
-        // which its escort spline already corridor-centered. The earlier version
-        // projected a geometric lag point off the tank (tx + bearing*lag) and
-        // MoveTo'd it through the raw PathGenerator: no corridor centering, so
-        // followers cut their own wall-hugging corners, and the projected point
-        // itself (bot's own Z, straight off the tank) could land on a ledge lip —
-        // the reported "hugging walls / falling off ledges in dynamic pull". Trail
-        // points are reachability-gated centered crumbs, so the move stays on the
-        // safe route the tank already cleared.
-        // probeReachable=false: this resolve exists to MEASURE the crumb (the
-        // arrival hold below), and the two branches that then move — the glide and
-        // the single-point step — each run their own reachability gate on the
-        // ground they actually use. Probing here bought a second full Detour query
-        // per follower per tick whose answer was thrown away.
-        Position trailPoint;
-        if (DcLeaderSignal::GetLeaderScoutTrailPoint(bot, lag, trailPoint,
-                                                     /*probeReachable=*/false))
-        {
-            // ARRIVAL HOLD. The hold gate above measures STRAIGHT-LINE distance to
-            // the tank (toTank <= lag), but the trail point is the crumb at `lag`
-            // yards of WALKED (path) distance behind the tank. On a curved corridor
-            // the two disagree: a crumb 15yd back along the trail can sit ~16yd
-            // straight-line from the tank, so a follower standing ON that crumb
-            // still reads toTank > lag and never satisfies the hold gate. Without
-            // this guard it re-issues MoveTo to the crumb it already occupies every
-            // tick, micro-stepping around it forever — the reported "two steps
-            // forward, two steps back" dance — and, because it's perpetually
-            // "moving", never sits to drink/eat, stalling the tank's between-pulls
-            // rest gate on its mana. So: if the bot has effectively reached the
-            // trail point, HOLD here (same teardown + tick-yield as the in-bubble
-            // branch) instead of demanding a straight-line gate it can't meet while
-            // parked on a curved crumb. The slack is just the path-vs-straight
-            // curvature over one lag; a few yards covers it without parking short.
-            if (bot->GetExactDist(&trailPoint) <= kTrailArrival)
+            float const toSlot = bot->GetExactDist(&slotPoint);
+            if (toSlot <= kTrailArrival)
             {
                 DcMovement::StopBot(bot, DcMovement::Stop::Hold);
-                DC_PULL_TRACE("[DC:{}] scout-lag: holding at trail point "
-                              "({:.1f}yd behind tank, lag {:.1f})",
-                              bot->GetName(), toTank, lag);
+                DC_PULL_TRACE("[DC:{}] scout-lag: holding at column slot ({:.1f}yd behind tank, lag {:.1f}, "
+                              "side {:.1f})",
+                              bot->GetName(), bot->GetExactDist(tank), slot.lag, slot.lateral);
                 return false;
             }
-            // Smooth glide along the centered crumb trail. Leave a healthy escort
-            // glide in flight alone so it chains seamlessly instead of relaunching
-            // (and stuttering) every tick, then ride the whole crumb window as ONE
-            // continuous spline rather than the per-crumb single-point MoveTo below.
             if (TrailSplineRunning(bot))
                 return true;
-            if (IssueTrailGlide(botAI, bot, lag))
-            {
-                DC_PULL_DEBUG("[DC:{}] scout-lag: gliding tank's centered breadcrumbs "
-                              "(was {:.1f}yd behind, lag {:.1f})",
-                              bot->GetName(), toTank, lag);
+            if (toSlot > kColumnGlideDistance && IssueTrailGlide(botAI, bot, slot.lag))
                 return true;
-            }
-            // normal_only: reject (don't straight-line to) a point that isn't
-            // reachable over a real navmesh path. Crumbs are already gated for
-            // reachability, but keep the guard as a belt-and-braces backstop.
-            // Reached only when the glide window was too short / unreachable —
-            // which is where the PROBED resolve belongs: this is the one branch
-            // that walks the follower to the crumb, so it re-resolves with the
-            // reachability / zone-line gate on (falling back to a farther-back
-            // crumb when the exact-lag point is across a seam, exactly as before).
-            if (DcLeaderSignal::GetLeaderScoutTrailPoint(bot, lag, trailPoint) &&
-                DcMoveTo(bot->GetMapId(), trailPoint.GetPositionX(),
-                       trailPoint.GetPositionY(), trailPoint.GetPositionZ(),
-                       false, false, /*normal_only=*/true))
+            if (DcMoveTo(bot->GetMapId(), slotPoint.GetPositionX(), slotPoint.GetPositionY(),
+                         slotPoint.GetPositionZ(), false, false, /*normal_only=*/true))
             {
-                DC_PULL_DEBUG("[DC:{}] scout-lag: trailing tank along breadcrumbs "
-                              "(was {:.1f}yd behind, lag {:.1f})",
-                              bot->GetName(), toTank, lag);
+                DC_PULL_DEBUG("[DC:{}] scout-lag: to column slot (lag {:.1f}, side {:.1f}, {:.1f}yd away)",
+                              bot->GetName(), slot.lag, slot.lateral, toSlot);
                 return true;
             }
         }
-        // No trail yet (pull mode just toggled on, tank hasn't moved) or the trail
-        // point was unreachable: fall through to a normal follow so the party never
-        // gets permanently stranded.
+        else if (bot->GetExactDist(tank) <= slot.lag)
+        {
+            DcMovement::StopBot(bot, DcMovement::Stop::Hold);
+            return false;
+        }
+        // No trail yet (pull mode just toggled on, tank hasn't moved) or the slot
+        // was unreachable: fall through to a normal follow so the party never gets
+        // permanently stranded.
     }
 
     // Room-aggro skirt for followers. While the leader clears a room before a boss
@@ -628,143 +655,44 @@ bool DungeonClearFollowTankAction::Execute(Event /*event*/)
     // (~10yd) had them strung out by the time the tank engaged.
     float const dist = std::min<float>(DC_PB_CONFIG(FollowDistance, followDistance), 6.0f);
 
-    // Centered trail-follow. Stock Follow() / MoveFollow re-paths to the follow
-    // slot through the core PathGenerator, which returns Detour's taut, wall-
-    // HUGGING line — so followers scrape walls and clip ledge edges the whole
-    // advance, the exact thing PathCenterEnable removes for the TANK. The tank's
-    // escort route is already corridor-centered, and its actual footsteps are
-    // recorded as breadcrumbs (DcAdvanceAction::RecordBreadcrumb). So once the
-    // tank has pulled ahead, walk the follower UP that centered crumb trail
-    // instead of re-deriving a parallel wall-hugging path of its own: the
-    // centering is inherited for free — the tank paid the navmesh/VMAP cost once
-    // when it built the route, and nothing here re-runs CorridorCenter. This is
-    // the same mechanism the dynamic scout-lag branch above uses, generalized to
-    // the ordinary close-follow. When the follower is already caught up near the
-    // tank we DON'T trail — we fall through to the golden-angle Follow() fan,
-    // whose spread keeps healers in LOS and the party out of one stack, and over
-    // that short a hop wall-hugging is irrelevant. Gated on the same switch as
-    // the centering itself (PathCenterEnable): with centering off the tank's
-    // crumbs are the wall-hugging line anyway, so there is nothing to inherit
-    // and the stock Follow() fan is the right fallback.
-    if (DcSettings::GetBool(ObjectGuid::Empty, "PathCenterEnable"))
-    {
-        // 3D, NOT 2D — the same metric everything else in this rung uses (the
-        // crumb spacing is walked 3D distance, the arrival hold below is
-        // GetExactDist, the tank's own spread gate is GetDistance). A 2D read
-        // here shrinks with the cosine of the slope, so on a ramp the leash
-        // arms at a LARGER true separation than on the flat and the correction
-        // the rung then issues is correspondingly bigger. Identical reasoning
-        // to the scout-lag branch above, which was fixed and this one was not.
-        float const toTank = bot->GetExactDist(tank);
-        // Only trail once the tank is beyond the tight follow bubble — i.e. a
-        // real corridor traversal is involved, not a fan-out shuffle. Below this
-        // the Follow() fan below keeps the cluster tight in healer LOS.
-        float const trailEngage = dist + 2.0f;
-        // Per-bot stagger so the column spreads single-file ALONG the
-        // centered trail rather than every follower targeting the one crumb
-        // at `dist` behind the tank and piling onto it. Stable per GUID, same
-        // spirit as the golden-angle fan below but projected onto the trail.
-        uint32 const slot = static_cast<uint32>(bot->GetGUID().GetCounter()) % 4u;
-        float const lag = dist + static_cast<float>(slot) * 3.0f;
-        // Past the leash AND past our own stagger slot, so the crumb we aim at is
-        // genuinely ahead of us — a catch-up, never a retreat. The `toTank > lag`
-        // half is what stops this rung gliding a follower BACKWARD down the trail
-        // and handing it straight back to the Follow() fan below, which is the
-        // ping-pong the party does behind a moving tank (worst on ramps, where the
-        // two legs are down and back up the incline). Live numbers and the full
-        // reasoning: DungeonClearMath::TrailFollowShouldEngage.
-        if (DungeonClearMath::TrailFollowShouldEngage(toTank, trailEngage, lag))
-        {
-            Position trailPoint;
-            // Skip the trail when the chosen crumb is one we already occupy: re-
-            // issuing MoveTo to a point we're basically on micro-steps in place
-            // (the scout-lag "two steps forward, two back" dance). Let Follow()
-            // take it — it early-outs cleanly when in range.
-            //
-            // probeReachable=false: same reason as the scout-lag resolve above —
-            // this answer is only MEASURED here, and both movers below gate their
-            // own ground. This ran on every trailing tick of every follower.
-            if (DcLeaderSignal::GetLeaderScoutTrailPoint(bot, lag, trailPoint,
-                                                         /*probeReachable=*/false) &&
-                bot->GetExactDist(&trailPoint) > kTrailArrival)
-            {
-                // Keep the teardown / orphan-reaper bookkeeping live; the point-
-                // move / glide supersedes any MoveFollow a prior tick installed
-                // (same as the scout-lag trail / room-aggro skirt branches above —
-                // no explicit Stop needed).
-                followedTank = tank->GetGUID();
-                DcFollowerLifecycle::MarkFollowing(bot->GetGUID());
-                // Smooth glide along the centered crumb trail: leave a healthy
-                // escort glide alone (re-issue discipline keyed on splineRunning,
-                // not the LastMovement wait), then ride the whole crumb window as
-                // ONE continuous spline instead of the per-crumb single-point
-                // MoveTo below — the per-crumb relaunch is what made followers
-                // half-step the whole advance.
-                if (TrailSplineRunning(bot))
-                    return true;
-                if (IssueTrailGlide(botAI, bot, lag))
-                {
-                    DC_PULL_DEBUG("[DC:{}] follow-tank: gliding tank's centered "
-                                  "breadcrumbs ({:.1f}yd behind, lag {:.1f})",
-                                  bot->GetName(), toTank, lag);
-                    return true;
-                }
-                // normal_only: never straight-line to a crumb that isn't reachable
-                // over a real navmesh path (belt-and-braces — crumbs are already
-                // reachability-gated in GetLeaderScoutTrailPoint). Reached only
-                // when the glide window was too short / unreachable — the one
-                // branch here that MOVES to the crumb, so it re-resolves with the
-                // probe on.
-                if (DcLeaderSignal::GetLeaderScoutTrailPoint(bot, lag, trailPoint) &&
-                    DcMoveTo(bot->GetMapId(), trailPoint.GetPositionX(),
-                           trailPoint.GetPositionY(), trailPoint.GetPositionZ(),
-                           false, false, /*normal_only=*/true))
-                {
-                    DC_PULL_DEBUG("[DC:{}] follow-tank: trailing tank's centered "
-                                  "breadcrumbs ({:.1f}yd behind, lag {:.1f})",
-                                  bot->GetName(), toTank, lag);
-                    return true;
-                }
-            }
-            // No usable trail yet (tank just moved off / crumb unreachable): fall
-            // through to the stock follow so the party never strands.
-        }
-    }
-
-    // Remember who we're chasing so the teardown branch above can cancel this
-    // continuous MoveFollow once the DC tank goes away.
+    // The follow column (see ColumnSlotFor). The follower walks the tank's own
+    // walked path, which the tank's escort route already centred in the corridor
+    // (DcAdvanceAction::RecordBreadcrumb), so it inherits that centring instead of
+    // re-pathing a wall-hugging line of its own: a long way behind it glides the
+    // breadcrumb trail as one spline, close in it steps to its slot, and at the slot
+    // with the tank standing it parks. Before the tank has walked anywhere there is
+    // no trail, and it follows at its slot's offset behind the tank.
+    float const maxSpread = DcPartyState::LeaderEffectiveMaxSpread(bot);
+    DcFormation::ColumnSlotPos const slot =
+        ColumnSlotFor(bot, tank, std::max(3.0f, dist), std::max(3.0f, maxSpread - kTrailArrival - 2.0f));
     followedTank = tank->GetGUID();
-    // Record that this player now carries a follow generator so the world-tick
-    // orphan reaper can cancel it if the AI is deleted out from under us — a
-    // self-bot leaving bot mode never runs the teardown branch above.
     DcFollowerLifecycle::MarkFollowing(bot->GetGUID());
-    // Explicit per-bot angle: every follower here is a self-bot (master ==
-    // itself), and MovementAction::GetFollowAngle() skips the master while
-    // scanning the group — a self-bot never matches its own entry and falls out
-    // at 0.0f — so the default Follow() overload gave the WHOLE party the same
-    // follow slot and stacked it on one point (which is also what kept the
-    // stock collision shuffle permanently armed). Same deterministic
-    // golden-angle fan as ComputeCampSlot, so the cluster spreads evenly and
-    // each bot's slot never moves between ticks.
-    //
-    // RAID: the subgroup picks one of eight ring segments and the seed fans
-    // within it, and the follow distance grows with the same-map population —
-    // 40 bots on one golden spiral at 5-man distance is a conga line whose
-    // tail laps the corridor (DcFormation::RaidFollowAngle).
-    uint32 const seed = static_cast<uint32>(bot->GetGUID().GetCounter());
-    float angle = Position::NormalizeOrientation(static_cast<float>(seed) * 2.39996323f);
-    float followDist = dist;
-    if (bot->GetMap() && bot->GetMap()->IsRaid())
+
+    Position slotPoint;
+    if (!ColumnPoint(bot, tank, slot, slotPoint))
+        return Follow(tank, DcFormation::ColumnFollowDist(slot), DcFormation::ColumnFollowAngle(slot));
+
+    float const toSlot = bot->GetExactDist(&slotPoint);
+    if (!tank->isMoving() && toSlot <= kColumnSlotArrival)
     {
-        angle = DcFormation::RaidFollowAngle(bot->GetSubGroup(), seed);
-        uint32 sameMap = 0;
-        if (Group* group = bot->GetGroup())
-            for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-                if (gref->GetSource() && gref->GetSource()->GetMapId() == bot->GetMapId())
-                    ++sameMap;
-        followDist = std::max(followDist, DcFormation::RingRadius(sameMap, followDist));
+        DcMovement::StopBot(bot, DcMovement::Stop::Hold);
+        return false;
     }
-    return Follow(tank, followDist, angle);
+    if (tank->isMoving() && toSlot <= kColumnSlotArrival && bot->isMoving())
+        return true;  // keeping pace; the next tick aims at the moved slot
+    if (TrailSplineRunning(bot))
+        return true;
+    if (toSlot > kColumnGlideDistance && IssueTrailGlide(botAI, bot, slot.lag))
+    {
+        DC_PULL_DEBUG("[DC:{}] follow-tank: gliding the tank's trail to column slot (lag {:.1f}, {:.1f}yd away)",
+                      bot->GetName(), slot.lag, toSlot);
+        return true;
+    }
+    if (DcMoveTo(bot->GetMapId(), slotPoint.GetPositionX(), slotPoint.GetPositionY(), slotPoint.GetPositionZ(),
+                 false, false, /*normal_only=*/true))
+        return true;
+    // No ground path to the slot (a ledge, a door): follow at its offset instead.
+    return Follow(tank, DcFormation::ColumnFollowDist(slot), DcFormation::ColumnFollowAngle(slot));
 }
 
 bool DungeonClearFilterLootAction::Execute(Event /*event*/)
