@@ -5,6 +5,7 @@
 
 #include "DcPullPlanner.h"
 
+#include "Ai/Dungeon/DungeonClear/Util/DcCreatureRole.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcFormation.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
 
@@ -497,6 +498,7 @@ bool DcPullPlanner::ClassifyPullAdvanced(PlayerbotAI* botAI, Unit* target,
         float aggroReach = 0.0f;
         bool patroller = false;
         bool elite = false;
+        bool canFlee = false;
         if (Creature* c = u->ToCreature())
         {
             aggroReach = c->GetAggroRange(lowMember) + c->GetCombatReach();
@@ -506,20 +508,25 @@ bool DcPullPlanner::ClassifyPullAdvanced(PlayerbotAI* botAI, Unit* target,
             // Elite-tier (elite / rare-elite / worldboss rank) counts full weight;
             // a normal mob a third — see the pull-weight tally below.
             elite = c->isElite();
+            // Runs for help at low health (SmartAI): the estimate counts the pack it
+            // would reach.
+            canFlee = DcCreatureRole::FlagsFor(c->GetCreatureTemplate()) & DcCreatureRole::Flees;
         }
         mobs.push_back({u->GetPositionX(), u->GetPositionY(), u->GetPositionZ(),
-                        chainEligible, packIds[i], aggroReach, patroller, elite});
+                        chainEligible, packIds[i], aggroReach, patroller, elite, canFlee});
     }
 
     // DC_Z_LEVEL_TOLERANCE: a mob more than this far above/below is on another
     // floor (a ledge/ramp) — it must not seed the pack or count as a proximity /
     // assist aggro just because it is near in plan view. Same constant the
     // corridor/boss-arrival floor guards use elsewhere in this file.
+    // The engine's own flee-for-help reach, like the assist hop above.
+    float const fleeRadius = sWorld->getFloatConfig(CONFIG_CREATURE_FAMILY_FLEE_ASSISTANCE_RADIUS);
     std::vector<std::size_t> counted;
     uint32 weightThirds = 0;
     uint32 const count = DungeonClearMath::EstimateAggroCount(
         mobs, targetIdx, combatSpread, assistRadius, DC_Z_LEVEL_TOLERANCE,
-        /*excludeLonePatrollers*/ false, &counted, &weightThirds);
+        /*excludeLonePatrollers*/ false, &counted, &weightThirds, fleeRadius);
     // The verdict weighs the counted set, not its raw body count: an elite is a
     // full unit, a normal a third. The ceiling (MaxLeeroyMobs, set in elites) is
     // scaled to the same thirds unit, so a room of weak normal trash no longer
@@ -547,7 +554,7 @@ bool DcPullPlanner::ClassifyPullAdvanced(PlayerbotAI* botAI, Unit* target,
         if (lonePatroller)
             DungeonClearMath::EstimateAggroCount(
                 mobs, targetIdx, combatSpread, assistRadius, DC_Z_LEVEL_TOLERANCE,
-                /*excludeLonePatrollers*/ true, nullptr, &reducedThirds);
+                /*excludeLonePatrollers*/ true, nullptr, &reducedThirds, fleeRadius);
         out->fullCount = weightThirds;
         out->reducedCount = reducedThirds;
         out->ceiling = ceilingThirds;

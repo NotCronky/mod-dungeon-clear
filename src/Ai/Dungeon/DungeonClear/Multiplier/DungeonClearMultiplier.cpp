@@ -68,22 +68,40 @@ static bool IsDamagingAction(PlayerbotAI* botAI, Action* action, std::string con
     return info && !info->IsPositive();
 }
 
-// A mob already beating on a non-tank party member is peeled at once: the
-// threat lead protects the tank's grip on HIS mobs, and waiting it out while a
-// caster eats a Ghoul only leaves that mob unattended (Pull Lab O1 rose with
-// the first hold). Single-target actions only — an AoE has no one target.
-static bool PeelsAMobOffTheParty(Player* bot, PlayerbotAI* botAI, Action* action)
+// The one unit a damaging action hits: a spell's target, or the current target
+// for a melee/attack action. Null for an area spell cast on the bot itself
+// (Frost Nova, Arcane Explosion, Consecration) — those have no one target.
+static Unit* SingleTargetOf(Player* bot, PlayerbotAI* botAI, Action* action)
 {
     Unit* target = nullptr;
     if (CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action))
         target = cast->GetTarget();
     else if (dynamic_cast<AttackAction*>(action))
         target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
-    if (!target || target == bot)
+    return target == bot ? nullptr : target;
+}
+
+// A mob already beating on a non-tank party member is peeled at once: the
+// threat hold protects the tank's grip on HIS mobs, and waiting it out while a
+// caster eats a Ghoul only leaves that mob unattended (Pull Lab O1 rose with
+// the first hold). Single-target actions only — an AoE has no one target.
+static bool PeelsAMobOffTheParty(Player* bot, Unit* target)
+{
+    if (!target)
         return false;
     Unit* victim = target->GetVictim();
     Player* p = victim ? victim->GetCharmerOrOwnerPlayerOrPlayerItself() : nullptr;
     return p && p != bot && p->IsInSameRaidWith(bot) && !PlayerbotAI::IsTank(p);
+}
+
+// The threat hold for one damaging action: by threat on its target, or the
+// opener timer for an area spell (DcLeaderSignal::ShouldHoldDpsDamage).
+static bool HoldsDamage(Player* bot, PlayerbotAI* botAI, Action* action, std::string const& name)
+{
+    if (!IsDamagingAction(botAI, action, name))
+        return false;
+    Unit* target = SingleTargetOf(bot, botAI, action);
+    return !PeelsAMobOffTheParty(bot, target) && DcLeaderSignal::ShouldHoldDpsDamage(bot, target);
 }
 
 static float RazorgorePossessionClamp(Player* bot, std::string const& name)
@@ -352,8 +370,9 @@ float DungeonClearMultiplier::GetValue(Action* action)
     }
 
     // Threat lead, damage side. A DPS follower holds ALL damage — stock rotation,
-    // melee, "dps assist", class reflexes — for PullPlayerReleaseDelay after the
-    // tank's first hit. The lead used to live only inside DC's own assist rung,
+    // melee, "dps assist", class reflexes — while its threat on the target nears
+    // the tank's (PullThreatCapPct), and an area spell for PullPlayerReleaseDelay
+    // after the tank's first hit. The lead used to live only inside DC's own assist rung,
     // so every stock damage action walked straight past it: the Pull Lab
     // baseline (lb-20261003-162407-1) caught a DPS landing damage 0.0-1.2s after
     // the tank's first hit in 20 of 33 scenarios. Movement is untouched (the
@@ -361,8 +380,7 @@ float DungeonClearMultiplier::GetValue(Action* action)
     // tank below the panic HP and the tank itself are never held (a healer's heals
     // are not damaging actions, its damage spells wait like a DPS's). Only
     // damaging actions pay for the leader lookup.
-    if (IsDamagingAction(botAI, action, name) && DcLeaderSignal::ShouldHoldDpsDamage(bot) &&
-        !PeelsAMobOffTheParty(bot, botAI, action))
+    if (HoldsDamage(bot, botAI, action, name))
         return 0.0f;
 
     // Stock follow-master (FollowAction, relevance ~1) points a bot at its MASTER —
@@ -433,8 +451,7 @@ float DungeonClearCombatMultiplier::GetValue(Action* action)
     // touched a bot that was already in combat — the Pull Lab still caught a
     // mage's Frost Nova 0.9s after the tank's first hit with the non-combat
     // gate in place (lb-20261003-165604-1). Same rule, same exemptions.
-    if (IsDamagingAction(botAI, action, name) && DcLeaderSignal::ShouldHoldDpsDamage(bot) &&
-        !PeelsAMobOffTheParty(bot, botAI, action))
+    if (HoldsDamage(bot, botAI, action, name))
         return 0.0f;
 
     // The possession clamp, first and unconditional — see its definition above.
