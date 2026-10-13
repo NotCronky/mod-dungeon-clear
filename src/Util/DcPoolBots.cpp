@@ -24,6 +24,7 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 
+#include "Assemble/DcAssembleManager.h"
 #include "BgQueueFill/DcBgQueueFillManager.h"
 #include "DungeonQueueFill/DcDungeonQueueFillManager.h"
 #include "DungeonQueueFill/DcDungeonQueueFillPlanner.h"
@@ -88,7 +89,8 @@ namespace DcPoolBots
     bool IsClaimedByFill(ObjectGuid guid)
     {
         return DcDungeonQueueFillManager::Instance().IsClaimed(guid) ||
-               DcBgQueueFillManager::Instance().IsClaimed(guid);
+               DcBgQueueFillManager::Instance().IsClaimed(guid) ||
+               DcAssembleManager::Instance().IsClaimed(guid);
     }
 
     ObjectGuid ClaimPoolCharacter(bool alliance, std::uint8_t classId, std::uint32_t& drawState,

@@ -1929,6 +1929,56 @@ DungeonClear.DungeonQueueFill.LogoutOnRelease = 1
 
 ###############################################################################
 #
+#   ASSEMBLE (DungeonClear.Assemble.*)
+#
+#   `.dc assemble <size> [tank|heal|dps]` fills the player's group to <size>
+#   (2-40) with bots ready for a dungeon or raid: the role quota of a
+#   `.dc test` party of that size (5: 1 tank, 1 healer, 3 damage; 40: 4, 10,
+#   26), counting the player (by talents, or the role they name) and everyone
+#   already in the group. Bots come from the addclass pool at the player's
+#   level and faction, rolled with the role's premade spec and gear, join the
+#   group (a raid past five) and are teleported to the player. Run it again
+#   with another size to add or remove bots; `.dc dismiss` logs them all out,
+#   as does the player removing a bot, leaving the group, or logging out.
+#
+
+#
+#    DungeonClear.Assemble.Enable
+#        1 = players may use `.dc assemble`. Turning it off logs out every
+#        assembled bot.
+#
+#        Default: 1
+#
+
+DungeonClear.Assemble.Enable = 1
+
+#
+#    DungeonClear.Assemble.SetupTimeoutSec
+#        Bound on each setup stage (logging in, moving, provisioning,
+#        readying). A bot that misses it is left out and the player is told.
+#        Provisioning rolls one bot per world tick realm-wide, so a 40-player
+#        raid takes a few seconds.
+#
+#        Default: 120
+#
+
+DungeonClear.Assemble.SetupTimeoutSec = 120
+
+#
+#    DungeonClear.Assemble.GearIlvl
+#    DungeonClear.Assemble.GearQuality
+#        Gear ceiling for assembled bots, as DungeonQueueFill.GearIlvl /
+#        GearQuality. 0 on either inherits Playerbots.AutoGearScoreLimit /
+#        Playerbots.AutoGearQualityLimit.
+#
+#        Default: 0 / 0 (inherit)
+#
+
+DungeonClear.Assemble.GearIlvl = 0
+DungeonClear.Assemble.GearQuality = 0
+
+###############################################################################
+#
 #   BATTLEGROUND INSTANT QUEUE FILL (DungeonClear.BgQueueFill.*)
 #
 #   When a real player queues for a battleground, log in, level, gear and

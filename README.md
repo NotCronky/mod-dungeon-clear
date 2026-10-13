@@ -77,6 +77,8 @@ session, so it needs no group.)
 | `.dc go <boss>` | | Route directly to a named boss. |
 | `.dc config` | | Print the effective `DungeonClear.*` values for the current run, marking addon overrides and heroic defaults. |
 | `.dc spectate` | | Toggle the free-fly spectator camera. `.dc spectate follow [name]` rides a bot instead. |
+| `.dc assemble <size> [tank\|heal\|dps]` | | Fill your group to `<size>` (2-40) with bots of the missing roles, at your level and gear-ready (5: 1 tank, 1 healer, 3 damage; 40: 4, 10, 26). You count as your talents' role, or the one you name. Run it again to grow or shrink; bare, it shows what you have. Settings: `DungeonClear.Assemble.*`. |
+| `.dc dismiss` | | Log out every bot `.dc assemble` added. |
 
 There is also `.dc test`, a GM-only automated test harness — see
 [Automated test runs](#automated-test-runs), below.
