@@ -1002,6 +1002,34 @@ DungeonClear.PullPetReleaseDelay = 2.5
 DungeonClear.PullThreatLeadPanicHp = 60
 
 #
+#    DungeonClear.PullThreatCapPct
+#        Threat cap for DPS followers. A single-target damage action (a bolt, a
+#        strike, auto-attack) is held while the bot's threat on that mob is at or
+#        above this percent of the tank's, and while the tank has no threat on it
+#        yet (for at most PullPlayerReleaseDelay plus a few seconds, so a mob the
+#        tank cannot reach never freezes the party). Melee takes aggro at 110% of
+#        the tank's threat and ranged at 130%, so 90 keeps a margin. A mob already
+#        hitting a non-tank is never held. Area spells keep the
+#        PullPlayerReleaseDelay timer.
+#            0 = off (every damaging action uses the PullPlayerReleaseDelay timer)
+#        Default: 90 (heroic: 80)
+#
+
+DungeonClear.PullThreatCapPct = 90
+
+#
+#    DungeonClear.FocusTarget
+#        The leader tank keeps a skull on one mob in each trash fight, and every
+#        bot's target picker attacks the skull first. Picked in this order: a mob
+#        fleeing for help, then healers, then casters, then the rest; a mob on a
+#        tank before a loose one; then the least health. Never in a boss fight,
+#        and never over a skull somebody else set.
+#        Default: 1 (on)
+#
+
+DungeonClear.FocusTarget = 1
+
+#
 #    DungeonClear.PartyCombatLatch
 #        Hysteresis (seconds) on the cross-bot "is the party fighting?" gate that
 #        drives BOTH the dynamic scout-lag suppression and the fight-assist arm. A
@@ -1487,6 +1515,9 @@ DungeonClear.SpectateSpeed = 2.5
 # DungeonClear.PullPlayerReleaseDelay.Heroic = 3.0
 # DungeonClear.PullPetReleaseDelay.Heroic = 4.5
 # DungeonClear.PullThreatLeadPanicHp.Heroic = 70.0
+
+#    Keep DPS further under the tank's threat: one lost heroic mob is a dead caster.
+# DungeonClear.PullThreatCapPct.Heroic = 80
 
 #    Release a held passive member while it still has the health to survive it —
 #    but only after the danger has persisted PullSafetyGrace seconds: one stray

@@ -1003,7 +1003,7 @@ void DcLeaderSignal::NoteLeaderEnterCombat(Player* player)
     run.leaderFirstHitMs = 0;
 }
 
-bool DcLeaderSignal::ShouldHoldDpsDamage(Player* bot)
+bool DcLeaderSignal::ShouldHoldDpsDamage(Player* bot, Unit* target)
 {
     if (!bot || !bot->IsAlive())
         return false;
@@ -1017,17 +1017,50 @@ bool DcLeaderSignal::ShouldHoldDpsDamage(Player* bot)
     if (!run.enabled || run.paused)
         return false;
     uint32 const since = LeaderCombatSince(leader);
-    uint32 firstHit = run.leaderFirstHitMs;
-    if (firstHit != 0 && firstHit < since)
-        firstHit = 0;  // a stamp from the previous fight
+    uint32 const now = getMSTime();
+    uint32 const leadMs = uint32(DcSettings::GetFloat(leader, "PullPlayerReleaseDelay") * 1000.0f);
+    float const panicHp = DcSettings::GetFloat(leader, "PullThreatLeadPanicHp");
     // Only the tank is exempt. A healer's DAMAGE spells wait too (a resto
     // shaman's shock opened 0.0s after the tank's hit); its heals are never
     // damaging actions, so healing is untouched.
     bool const exempt = PlayerbotAI::IsTank(bot);
+    bool const beingAttacked = !bot->getAttackers().empty();
+
+    // A single target: hold by threat, for the whole fight. The tank whose threat
+    // counts is the one the mob is on (an off-tank's mob in a raid), else the
+    // leader; a mob on a non-tank is a peel, which the caller lets through.
+    uint32 const capPct = DcSettings::GetUInt(leader, "PullThreatCapPct");
+    Creature* mob = target ? target->ToCreature() : nullptr;
+    if (capPct && mob && mob->IsAlive())
+    {
+        Unit* holder = leader;
+        if (Unit* victim = mob->GetVictim())
+            if (Player* victimPlayer = victim->ToPlayer())
+                if (victimPlayer != bot && PlayerbotAI::IsTank(victimPlayer))
+                    holder = victimPlayer;
+
+        DungeonClearMath::ThreatHoldInput in;
+        in.exempt = exempt;
+        in.beingAttacked = beingAttacked;
+        in.tankThreat = mob->GetThreatMgr().GetThreat(holder);
+        in.botThreat = mob->GetThreatMgr().GetThreat(bot);
+        in.capPct = capPct;
+        in.combatSinceMs = since;
+        in.now = now;
+        in.noTankThreatCapMs = leadMs + DC_THREAT_LEAD_NO_HIT_CAP_MS;
+        in.tankHealthPct = leader->GetHealthPct();
+        in.panicHpPct = panicHp;
+        return DungeonClearMath::ShouldHoldForThreat(in);
+    }
+
+    // No single target (an area spell), or the cap is off: the opener timer from
+    // the tank's first hit.
+    uint32 firstHit = run.leaderFirstHitMs;
+    if (firstHit != 0 && firstHit < since)
+        firstHit = 0;  // a stamp from the previous fight
     return DungeonClearMath::ShouldHoldThreatLead(
-        exempt, !bot->getAttackers().empty(), since, firstHit, getMSTime(),
-        uint32(DcSettings::GetFloat(leader, "PullPlayerReleaseDelay") * 1000.0f), DC_THREAT_LEAD_NO_HIT_CAP_MS,
-        leader->GetHealthPct(), DcSettings::GetFloat(leader, "PullThreatLeadPanicHp"));
+        exempt, beingAttacked, since, firstHit, now, leadMs, DC_THREAT_LEAD_NO_HIT_CAP_MS, leader->GetHealthPct(),
+        panicHp);
 }
 
 bool DcLeaderSignal::IsLeaderShouldAssistFight(Player* bot)

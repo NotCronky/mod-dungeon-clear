@@ -18,7 +18,8 @@ std::uint32_t DungeonClearMath::EstimateAggroCount(std::vector<DynPullMob> const
                                                    float zTolerance,
                                                    bool excludeLonePatrollers,
                                                    std::vector<std::size_t>* countedOut,
-                                                   std::uint32_t* weightThirdsOut)
+                                                   std::uint32_t* weightThirdsOut,
+                                                   float fleeRadius)
 {
     if (weightThirdsOut)
         *weightThirdsOut = 0;
@@ -122,6 +123,42 @@ std::uint32_t DungeonClearMath::EstimateAggroCount(std::vector<DynPullMob> const
         for (std::size_t k = 0; k < n; ++k)
             if (find(k) == r)
                 inSet[k] = 1;
+    }
+
+    // Flee for help: a counted mob that runs at low health reaches the nearest
+    // creature within the flee radius and brings it, with its pack. Snapshot the
+    // set so an added mob does not flee-chain further.
+    if (fleeRadius > 0.0f)
+    {
+        std::vector<char> const before = inSet;
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            if (!before[i] || !mobs[i].canFlee)
+                continue;
+            std::size_t nearest = n;
+            float nearestDist = fleeRadius;
+            for (std::size_t j = 0; j < n; ++j)
+            {
+                if (inSet[j] || !eligible(j) || !sameLevel(i, j))
+                    continue;
+                float const d = dist2d(i, j);
+                if (d <= nearestDist)
+                {
+                    nearest = j;
+                    nearestDist = d;
+                }
+            }
+            if (nearest == n)
+                continue;
+            inSet[nearest] = 1;
+            if (mobs[nearest].packId != 0)
+            {
+                std::size_t const r = find(nearest);
+                for (std::size_t k = 0; k < n; ++k)
+                    if (find(k) == r)
+                        inSet[k] = 1;
+            }
+        }
     }
 
     if (countedOut)

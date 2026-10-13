@@ -220,6 +220,7 @@ namespace DungeonClearMath
         float         aggroReach = 0.0f;
         bool          patroller = false;
         bool          elite = false;
+        bool          canFlee = false;  // a SmartAI flee-for-help at low health (DcCreatureRole)
     };
 
     // Pure Dynamic-pull estimate: how many mobs aggro if the party Leeroys on top
@@ -252,12 +253,19 @@ namespace DungeonClearMath
     // This is the value the verdict compares to a x3-scaled ceiling so a normal mob
     // weighs a third of an elite (the ceiling was tuned in elites). The return value
     // stays the raw body count (what `countedOut` enumerates) for diagnostics.
+    // `fleeRadius` (> 0): a counted mob that `canFlee` runs for help at low health
+    // to the nearest creature within that radius (Creature::DoFleeToGetAssistance,
+    // CONFIG_CREATURE_FAMILY_FLEE_ASSISTANCE_RADIUS), and brings it back. So the
+    // nearest uncounted, eligible, same-level mob within `fleeRadius` of each such
+    // mob is counted too, with its pack. One ring: a mob added this way does not
+    // flee-chain further.
     std::uint32_t EstimateAggroCount(std::vector<DynPullMob> const& mobs,
                                      std::size_t targetIdx, float combatSpread,
                                      float assistRadius, float zTolerance,
                                      bool excludeLonePatrollers = false,
                                      std::vector<std::size_t>* countedOut = nullptr,
-                                     std::uint32_t* weightThirdsOut = nullptr);
+                                     std::uint32_t* weightThirdsOut = nullptr,
+                                     float fleeRadius = 0.0f);
 
     // Pull CC-assist grace gate (pure). Decides whether a CC-impaired drag-back
     // should be ABORTED so the party drops passive and piles in to help the tank.
@@ -1543,6 +1551,103 @@ namespace DungeonClearMath
     inline bool ShouldDropLaneRefusals(uint32_t liveNow, uint32_t liveAtWrite)
     {
         return liveNow < liveAtWrite;
+    }
+
+    // Threat cap, damage side (pure — gtested). Replaces the opener timer for a
+    // single-target damaging action: should a DPS follower hold it against
+    // `target`? The tank keeps every mob as long as nobody else's threat on it
+    // nears his, so a follower holds while its own threat on the target is at or
+    // above `capPct` percent of the tank's, and holds while the tank has no
+    // threat on it at all — for at most `noTankThreatCapMs` from the leader's
+    // fight start, so a mob the tank cannot reach never freezes the party.
+    // Never holds an `exempt` bot (the tank), a follower something is attacking
+    // (`beingAttacked`), when the tank is below `panicHpPct` (<= 0 disables that
+    // bypass), when `peel` (the target is beating on a non-tank party member), or
+    // when `capPct` is 0 (feature off: the caller falls back to the opener timer).
+    struct ThreatHoldInput
+    {
+        bool exempt = false;
+        bool beingAttacked = false;
+        bool peel = false;
+        float tankThreat = 0.0f;       // the leader tank's threat on the target
+        float botThreat = 0.0f;        // this follower's threat on the target
+        std::uint32_t capPct = 0;      // PullThreatCapPct
+        std::uint32_t combatSinceMs = 0;
+        std::uint32_t now = 0;
+        std::uint32_t noTankThreatCapMs = 0;
+        float tankHealthPct = 100.0f;
+        float panicHpPct = 0.0f;
+    };
+
+    inline bool ShouldHoldForThreat(ThreatHoldInput const& in)
+    {
+        if (in.exempt || in.beingAttacked || in.peel || in.capPct == 0)
+            return false;
+        if (in.panicHpPct > 0.0f && in.tankHealthPct < in.panicHpPct)
+            return false;
+        if (in.tankThreat <= 0.0f)
+        {
+            if (in.combatSinceMs == 0 || in.now < in.combatSinceMs)
+                return true;
+            return in.now - in.combatSinceMs < in.noTankThreatCapMs;
+        }
+        return in.botThreat >= in.tankThreat * float(in.capPct) / 100.0f;
+    }
+
+    // Focus target (pure — gtested). The leader keeps one kill target marked
+    // (skull) for the party. Ranked: a fleeing mob first (it is about to bring
+    // another pack), then healers, then casters, then the rest; within a rank, a
+    // mob already on a tank (safe to hit) before a loose one, then the least
+    // health. The current mark stands unless something of a strictly better rank
+    // appears, so the party is not flipped between mobs every tick.
+    enum class FocusRank : std::uint8_t
+    {
+        Fleeing = 0,
+        Healer = 1,
+        Caster = 2,
+        Other = 3,
+    };
+
+    struct FocusCandidate
+    {
+        FocusRank rank = FocusRank::Other;
+        bool onTank = false;
+        std::uint32_t health = 0;
+    };
+
+    // Returns the index to mark, or -1 when `candidates` is empty. `currentIdx` is
+    // the index of the mob marked now (-1 = none of them).
+    inline int PickFocusTarget(std::vector<FocusCandidate> const& candidates, int currentIdx)
+    {
+        int best = -1;
+        for (std::size_t i = 0; i < candidates.size(); ++i)
+        {
+            if (best < 0)
+            {
+                best = static_cast<int>(i);
+                continue;
+            }
+            FocusCandidate const& c = candidates[i];
+            FocusCandidate const& b = candidates[static_cast<std::size_t>(best)];
+            if (c.rank != b.rank)
+            {
+                if (c.rank < b.rank)
+                    best = static_cast<int>(i);
+                continue;
+            }
+            if (c.onTank != b.onTank)
+            {
+                if (c.onTank)
+                    best = static_cast<int>(i);
+                continue;
+            }
+            if (c.health < b.health)
+                best = static_cast<int>(i);
+        }
+        if (currentIdx >= 0 && static_cast<std::size_t>(currentIdx) < candidates.size() && best >= 0 &&
+            candidates[static_cast<std::size_t>(currentIdx)].rank <= candidates[static_cast<std::size_t>(best)].rank)
+            return currentIdx;
+        return best;
     }
 }
 

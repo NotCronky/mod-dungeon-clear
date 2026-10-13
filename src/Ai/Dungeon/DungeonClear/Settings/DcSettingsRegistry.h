@@ -469,6 +469,24 @@ inline constexpr DcSettingDef kDcSettings[] =
     // sooner, or the safer opening becomes a slower death.
     { "PullThreatLeadPanicHp",  DcType::Float, 60,   0, 100,  true,  70 },
 
+    // Threat cap (DungeonClearMath::ShouldHoldForThreat). A DPS follower's
+    // single-target damage is held while its threat on that mob is at or above
+    // this percent of the tank's, and while the tank has no threat on it yet (for
+    // at most the release delay plus DC_THREAT_LEAD_NO_HIT_CAP_MS). Melee takes
+    // aggro at 110% of the tank's threat and ranged at 130%, so 90 keeps a margin.
+    // Area spells keep the PullPlayerReleaseDelay timer. 0 = off: every damaging
+    // action uses the timer, as before.
+    //
+    // HEROIC: heroic mobs hit hard enough that one lost mob is a dead caster; keep
+    // a wider margin.
+    { "PullThreatCapPct",       DcType::UInt,  90,   0, 100,  true,  80 },
+
+    // Kill-target skull (DcFocusTarget). The leader keeps a skull on one mob in a
+    // trash fight — a fleeing mob, then healers, then casters, then the least
+    // health — which every bot's target picker puts first. Never in a boss fight,
+    // and never over a skull somebody else set. 0 = off.
+    { "FocusTarget",            DcType::Bool,   1,   0,   1,  true  },
+
     // Camp-safety valve for advanced pull mode (`dc pull`). While a pull is in
     // progress the DPS and healer wait passive at the camp and can't defend
     // themselves if a patrol clips the camp or the pull goes sideways. If a held,

@@ -74,6 +74,7 @@ if (BUILD_TESTING)
         add_executable(dungeon_clear_tests
             "${MOD_PATH}/t/TestDoorPolicy.cpp"
             "${MOD_PATH}/t/TestDungeonClearMath.cpp"
+            "${MOD_PATH}/t/TestFightBetter.cpp"
             "${MOD_PATH}/t/TestHealReposition.cpp"
             "${MOD_PATH}/t/TestCombatRegroup.cpp"
             "${MOD_PATH}/t/TestEscapeLeap.cpp"

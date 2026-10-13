@@ -91,6 +91,7 @@
 #include "Ai/Dungeon/DungeonClear/DungeonClearTriggerContext.h"
 #include "Ai/Dungeon/DungeonClear/DungeonClearValueContext.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcCombatPurge.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcFocusTarget.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPathWorker.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcFirstContact.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPullBrake.h"
@@ -580,6 +581,10 @@ public:
         // get one. Internally throttled and gated on the map having a row, so it
         // is a handful of integer compares on every other map.
         DcCombatPurge::Tick(diff);
+
+        // Kill-target skull for each running clear's trash fights. World tick:
+        // group icons change while the maps are idle. Throttled inside.
+        DcFocusTarget::Tick(diff);
 
         // `.dc test` harness state machine (spawn -> gear -> group -> teleport
         // -> dc on -> watchdogs -> record). Cheap no-op while no test run is
