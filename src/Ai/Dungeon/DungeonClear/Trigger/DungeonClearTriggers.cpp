@@ -43,6 +43,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcRegroupDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRaidMuster.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRezRecovery.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcBreathProvision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcSmartRest.h"
 #include "Ai/Dungeon/DungeonClear/Util/DungeonClearMath.h"
@@ -943,6 +944,12 @@ bool DungeonClearRecoverStrandedTrigger::IsActive()
     if (!map || !map->IsDungeon())
         return false;
 
+    // The breath watchdog rides the same per-tick, leader-only site: it stamps
+    // every member's "under water since" on the run state and rescues a bot
+    // that is drowning with no swim leg driving it (DcBreathProvision). A no-op
+    // on followers and off/paused runs, like Evaluate below.
+    DcBreathProvision::WatchdogTick(bot);
+
     // Evaluate is the failsafe's clock owner: it ticks the leader's no-progress
     // clock as a side effect (leader-only inside; a no-op on followers and on
     // off/paused runs) and returns true only when a rescue teleport is due.
@@ -1813,16 +1820,23 @@ namespace
     // and three copies of a guard list this delicate is how they drift. This
     // wrapper keeps the shape THIS caller needs: opaque (no refs at all) is
     // legitimate-by-default here, and only here.
-    bool HasLegitimateCombatHolder(Player* bot, float& nearestDist)
+    // `nearestSeenDist` is the same for the closest holder the bot can SEE (+inf when
+    // none) — the distance the engage-range clause judges. See
+    // DcCombatFlag::HolderScan::nearestSeenDist.
+    bool HasLegitimateCombatHolder(Player* bot, float& nearestDist, float& nearestSeenDist)
     {
         DcCombatFlag::HolderScan const scan = DcCombatFlag::ScanCombatHolders(bot);
         if (scan.opaque)
         {
             nearestDist = 0.0f;
+            nearestSeenDist = 0.0f;
             return true;  // no unit to blame -> opaque/forced combat, leave it alone
         }
         if (scan.found)
+        {
             nearestDist = scan.nearestDist;
+            nearestSeenDist = scan.nearestSeenDist;
+        }
         return scan.found;
     }
 }
@@ -1883,7 +1897,15 @@ bool DungeonClearBreakStuckCombatTrigger::IsActive()
     // scan behind the two cheap reads: a real fight almost always trips
     // hasAttacker/hasVictim, and a fleeing/kiting party trips the reachable-holder
     // test — either way we never run down the timer.
-    bool const hasAttacker = !bot->getAttackers().empty();
+    //
+    // An attacker only counts if the bot can SEE it. Stock AttackersValue drops
+    // anything out of LOS, so an unseen attacker is one no playerbots action will
+    // ever fight — the bot sits on the non-combat engine reading `no attackers`
+    // while the flag holds forever (tr-20261018-101829-1: two Angerforge
+    // Reservists fell off his balcony and held the tank from the floor below for
+    // 900s). Such an attacker still has a combat reference, so the holder scan
+    // below picks it up and asks the right question of it: is it coming?
+    bool const hasAttacker = DcCombatFlag::HasSeenAttacker(bot);
     bool const hasVictim   = bot->GetVictim() != nullptr;
 
     // Second question, asked only once legitimacy passes: is that holder actually
@@ -1896,8 +1918,9 @@ bool DungeonClearBreakStuckCombatTrigger::IsActive()
     // so the streak clock below runs and the existing force-clear fires. See
     // DungeonClearMath::IsHolderProsecutingFight.
     float holderDist = 0.0f;
+    float seenHolderDist = std::numeric_limits<float>::infinity();
     bool const legitimateHolder =
-        !hasAttacker && !hasVictim && HasLegitimateCombatHolder(bot, holderDist);
+        !hasAttacker && !hasVictim && HasLegitimateCombatHolder(bot, holderDist, seenHolderDist);
 
     // The watchdog must only be re-armed when there is nothing left to measure — a
     // real fight, or no legitimate holder at all. Re-arming it on every tick where the
@@ -1911,7 +1934,7 @@ bool DungeonClearBreakStuckCombatTrigger::IsActive()
 
     bool const hasHolder =
         hasAttacker || hasVictim ||
-        DungeonClearMath::IsHolderProsecutingFight(legitimateHolder, holderDist,
+        DungeonClearMath::IsHolderProsecutingFight(legitimateHolder, seenHolderDist,
                                                    DC_ENGAGE_RANGE, closing);
 
     bool const phantom =
